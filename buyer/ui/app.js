@@ -75,7 +75,7 @@ function renderEvidence(data) {
 function buildOption(option, index, data) {
   const card = element("article", "pane option");
   const summary = element("div", "option-summary");
-  summary.append(element("div", "micro", index === 0 ? "САМЫЙ ДОСТУПНЫЙ" : "ВАРИАНТ " + (index + 1)),
+  summary.append(element("div", "micro", "ВАРИАНТ " + (index + 1)),
     element("h3", "total", money(option.total_rub)),
     element("p", "reserve", option.total_rub === data.budget_rub ? "Ровно в бюджете"
       : "Запас " + money(data.budget_rub - option.total_rub)));

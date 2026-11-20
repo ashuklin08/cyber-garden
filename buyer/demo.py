@@ -11,6 +11,7 @@ from threading import BoundedSemaphore
 
 from buyer.contracts import CATEGORIES, CITIES, ROOT, decode_json, read_catalog, read_messages
 from buyer.conversation import ConversationManager
+from buyer.indexed import SearchError, SearchProvider
 from buyer.lab import QUERY, compare
 from buyer.model import ModelError, ModelTrace, extract
 from buyer.selection import LABELS, actual_feature, describe_condition, select
@@ -27,9 +28,11 @@ CSP = "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors '
 
 class DemoServer(ThreadingHTTPServer):
     daemon_threads = True
+    request_queue_size = 64
 
-    def __init__(self, port, catalog):
-        self.catalog = decode_json(catalog.read_bytes())
+    def __init__(self, port, catalog, provider=None):
+        self.provider = provider
+        self.catalog = [] if provider else decode_json(catalog.read_bytes())
         self.listings = read_catalog(self.catalog)
         self.titles = {item["id"]: item["title"] for item in self.catalog}
         self.gateway_slot = BoundedSemaphore(1)
@@ -64,7 +67,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._local_host():
             self._json(HTTPStatus.FORBIDDEN, {"error": "Демо доступно через localhost."})
         elif self.path == "/api/catalog":
-            self._json(HTTPStatus.OK, {"total": len(self.server.listings), "cities": list(CITIES.values())})
+            try:
+                provider = self.server.provider
+                total = provider.cluster.call(provider.index + "/_count")["count"] if provider else len(self.server.listings)
+                self._json(HTTPStatus.OK, {"total": total, "cities": list(CITIES.values())})
+            except SearchError:
+                self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Каталог временно недоступен."})
         elif asset and (UI / asset[0]).is_file():
             self._send(HTTPStatus.OK, (UI / asset[0]).read_bytes(), asset[1])
         else:
@@ -117,7 +125,11 @@ class Handler(BaseHTTPRequestHandler):
             data = compare(requirements)
             data.update({"query": QUERY, "trace": asdict(trace)})
         else:
-            data = self._buyer_result(query, trace)
+            try:
+                data = self._buyer_result(query, trace)
+            except (SearchError, ValueError):
+                self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Не удалось получить полный результат поиска."})
+                return
             data["preferences"] = [asdict(item) for item in query.preferences]
         self._json(HTTPStatus.OK, data)
 
@@ -132,7 +144,14 @@ class Handler(BaseHTTPRequestHandler):
     def _buyer_result(self, query, trace):
         requirements = query.requirements
         clarification = query.attribute_questions() if not query.questions() else ()
-        result = None if clarification else select(self.server.listings, requirements)
+        listings, titles = self.server.listings, self.server.titles
+        if clarification:
+            result = None
+        elif self.server.provider:
+            found = self.server.provider.search(requirements, query.preferences)
+            result, listings, titles = found.selection, found.listings, found.titles
+        else:
+            result = select(listings, requirements)
         items = {
             listing_id for option in (result.response.get("options", []) if result else [])
             for listing_id in option["listing_ids"]
@@ -159,9 +178,9 @@ class Handler(BaseHTTPRequestHandler):
             "minimum_total_rub": result.minimum_total_rub if result else None,
             "items": {
                 item.id: {"category": CATEGORIES[item.category], "category_id": item.category,
-                          "title": self.server.titles[item.id], "price_rub": item.price_rub,
+                          "title": titles[item.id], "price_rub": item.price_rub,
                           "feature": actual_feature(item), "city": CITIES[item.city_id]}
-                for item in self.server.listings if item.id in items
+                for item in listings if item.id in items
             },
         }
 
@@ -174,8 +193,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=ROOT / "data/catalog.json")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--index", help="Имя готового индекса OpenSearch")
+    parser.add_argument("--search-url", default="http://127.0.0.1:19200")
+    parser.add_argument("--semantic-model", type=Path, help="Папка с ONNX E5 и tokenizer.json")
     args = parser.parse_args()
-    with DemoServer(args.port, args.catalog) as server:
+    provider = SearchProvider(args.search_url, args.index) if args.index else None
+    if args.semantic_model:
+        if not provider:
+            parser.error("--semantic-model требует --index")
+        from buyer.semantic import SemanticRanker
+        provider.semantic = SemanticRanker(args.semantic_model)
+    with DemoServer(args.port, args.catalog, provider) as server:
         print(f"http://127.0.0.1:{server.server_port}", flush=True)
         try:
             server.serve_forever()
