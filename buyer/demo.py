@@ -10,8 +10,9 @@ from pathlib import Path
 from threading import BoundedSemaphore
 
 from buyer.contracts import CATEGORIES, CITIES, ROOT, decode_json, read_catalog, read_messages
+from buyer.conversation import ConversationManager
 from buyer.lab import QUERY, compare
-from buyer.model import ModelError, interpret
+from buyer.model import ModelError, ModelTrace, extract
 from buyer.selection import LABELS, actual_feature, describe_condition, select
 
 UI = Path(__file__).with_name("ui")
@@ -96,28 +97,44 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.BAD_REQUEST, {"error": "Проверьте формат и длину диалога."})
             return
 
-        if not self.server.gateway_slot.acquire(blocking=False):
+        try:
+            query, trace = ConversationManager().resolve(
+                messages, self._gemma, require_model=self.path == "/api/lab"
+            )
+        except GatewayBusy:
             self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Gemma уже обрабатывает запрос. Повторите чуть позже."})
             return
-        try:
-            requirements, trace = interpret(messages)
         except ModelError as error:
             self._json(HTTPStatus.BAD_GATEWAY, {"error": str(error)})
             return
-        finally:
-            self.server.gateway_slot.release()
-
+        requirements = query.requirements
+        if trace is None:
+            trace = ModelTrace("Локальный разбор", None, None, 0, "локальный разбор")
+        elif "categories" in query.confirmed:
+            trace = ModelTrace(trace.model, trace.prompt_tokens, trace.completion_tokens,
+                               trace.elapsed_ms, "локальный разбор")
         if self.path == "/api/lab":
             data = compare(requirements)
             data.update({"query": QUERY, "trace": asdict(trace)})
         else:
-            data = self._buyer_result(requirements, trace)
+            data = self._buyer_result(query, trace)
+            data["preferences"] = [asdict(item) for item in query.preferences]
         self._json(HTTPStatus.OK, data)
 
-    def _buyer_result(self, requirements, trace):
-        result = select(self.server.listings, requirements)
+    def _gemma(self, messages, *, full_history):
+        if not self.server.gateway_slot.acquire(blocking=False):
+            raise GatewayBusy
+        try:
+            return extract(messages, full_history=full_history)
+        finally:
+            self.server.gateway_slot.release()
+
+    def _buyer_result(self, query, trace):
+        requirements = query.requirements
+        clarification = query.attribute_questions() if not query.questions() else ()
+        result = None if clarification else select(self.server.listings, requirements)
         items = {
-            listing_id for option in result.response.get("options", [])
+            listing_id for option in (result.response.get("options", []) if result else [])
             for listing_id in option["listing_ids"]
         }
         core_fields = [
@@ -132,13 +149,14 @@ class Handler(BaseHTTPRequestHandler):
                 conditions.append({"label": LABELS[key], "value": describe_condition(key, condition)})
 
         return {
-            "response": result.response,
+            "response": result.response if result else None,
+            "clarification": clarification,
             "trace": asdict(trace),
             "requirements": core_fields + conditions,
             "budget_rub": requirements.budget_rub,
             "eligible": [{"category": CATEGORIES[key], "count": count}
-                         for key, count in result.eligible_counts.items()],
-            "minimum_total_rub": result.minimum_total_rub,
+                         for key, count in result.eligible_counts.items()] if result else [],
+            "minimum_total_rub": result.minimum_total_rub if result else None,
             "items": {
                 item.id: {"category": CATEGORIES[item.category], "category_id": item.category,
                           "title": self.server.titles[item.id], "price_rub": item.price_rub,
@@ -146,6 +164,10 @@ class Handler(BaseHTTPRequestHandler):
                 for item in self.server.listings if item.id in items
             },
         }
+
+
+class GatewayBusy(Exception):
+    pass
 
 
 def main():

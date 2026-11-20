@@ -17,8 +17,10 @@ UNSUPPORTED = re.compile(
     r"табурет|пуфик|зеркало|телевизор)(?:а|у|ом|е|ы|ов|ами|ах)?(?!\w)", re.I
 )
 REMOVE = re.compile(r"\b(?:без|убери|исключи|удали|вычеркни|отмени)\s*$", re.I)
+AFTER_REMOVE = re.compile(r"^\s*(?:(?:(?:мне|нам|теперь|уже|больше)\s+)*не\s+нуж|уже\s+есть\b)")
 ADD = re.compile(r"\b(?:добавь|добавить|плюс|ещё|еще|также)\b", re.I)
-ONLY = re.compile(r"\b(?:только|лишь|один|одну|одно)\b", re.I)
+ONLY = re.compile(r"\b(?:только|лишь)\s+(?:(?:компьютерн\w*|письменн\w*|"
+                  r"удобн\w*|офисн\w*|настольн\w*)\s+)?$", re.I)
 AMBIGUOUS = re.compile(r"\b(?:или|либо|может|возможно|если|вместо|лучше|предпочтительнее)\b", re.I)
 
 
@@ -28,11 +30,10 @@ class CategoryAnchor:
     reason: str
 
 
-def categories_from_dialog(messages):
+def categories_from_dialog(messages, initial=()):
     """Return an anchor only when all category changes have an explicit local reading."""
-    selected = set()
-    saw_category = False
-    unsupported_requested = False
+    selected = set(initial)
+    unsupported_requested = set()
     for message in messages:
         if message["role"] != "user":
             continue
@@ -41,16 +42,19 @@ def categories_from_dialog(messages):
             (match.start(), match.end(), key)
             for key, pattern in WORDS.items() for match in pattern.finditer(text)
         )
-        if ONLY.search(text):
-            unsupported_requested = False
+        only_category = any(ONLY.search(text[:start]) for start, _, _ in mentions)
+        if only_category:
+            unsupported_requested.clear()
         for match in UNSUPPORTED.finditer(text):
             before = text[max(0, match.start() - 32):match.start()]
             after = text[match.end():match.end() + 32]
             if re.search(r"\b(?:для|под|к|от|на|с|со)\s*$", before):
                 continue
             removed = (REMOVE.search(before) or re.search(r"\bне\s+нуж\w*\s*$", before)
-                       or re.search(r"^\s*(?:больше\s+)?не\s+нуж", after))
-            unsupported_requested = not bool(removed)
+                       or AFTER_REMOVE.search(after))
+            if removed:
+                continue
+            unsupported_requested.add(match[0])
         if not mentions:
             continue
         if AMBIGUOUS.search(text):
@@ -58,21 +62,26 @@ def categories_from_dialog(messages):
 
         adds = set()
         removes = set()
+        previous_end = 0
+        previous_removed = False
         for start, end, key in mentions:
             before = text[max(0, start - 32):start]
             after = text[end:end + 32]
-            if (REMOVE.search(before) or re.search(r"^\s*(?:больше\s+)?не\s+нуж", after)
-                    or re.search(r"^\s+уже\s+есть\b", after)):
+            removed = bool(REMOVE.search(before) or re.search(r"\bне\s+(?:нуж\w*|хочу)\s*$", before)
+                           or AFTER_REMOVE.search(after))
+            if previous_removed and re.fullmatch(r"\s*(?:,\s*)?(?:и\s+)?", text[previous_end:start]):
+                removed = True
+            if removed:
                 removes.add(key)
             else:
                 adds.add(key)
+            previous_end, previous_removed = end, removed
         if adds & removes:
             return CategoryAnchor(None, "Противоречивое изменение состава")
 
-        saw_category = True
-        if not selected or ONLY.search(text):
+        if not selected or only_category:
             selected = adds
-        elif ADD.search(text) or removes:
+        elif ADD.search(text) or removes or adds <= selected:
             selected.update(adds)
         else:
             return CategoryAnchor(None, "Неясно, заменён ли состав комплекта")
@@ -80,6 +89,6 @@ def categories_from_dialog(messages):
 
     if unsupported_requested:
         return CategoryAnchor(None, "В запросе есть товар вне каталога")
-    if not saw_category or not selected:
+    if not selected:
         return CategoryAnchor(None, "Категории нужно уточнить")
     return CategoryAnchor(tuple(key for key in CATEGORIES if key in selected), "Явные категории и изменения")

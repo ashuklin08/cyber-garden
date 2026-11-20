@@ -40,6 +40,7 @@ function bubble(role, text) {
 }
 
 function traceText(trace) {
+  if (trace.model === "Локальный разбор") return trace.model + " · без вызова Gemma";
   const tokens = trace.prompt_tokens !== null && trace.completion_tokens !== null
     ? " · " + (trace.prompt_tokens + trace.completion_tokens) + " токенов" : "";
   return trace.model.split("/").pop() + " · " +
@@ -65,6 +66,10 @@ function renderEvidence(data) {
   }
   evidence.append(element("p", "model-trace", traceText(data.trace)));
   evidence.append(element("p", "model-trace", "Категории · " + data.trace.category_source));
+  if (data.preferences?.length) {
+    evidence.append(element("p", "model-trace", "Пожелания · " +
+      [...new Set(data.preferences.map(({text}) => text))].join(", ")));
+  }
 }
 
 function buildOption(option, index, data) {
@@ -149,15 +154,21 @@ async function submit(text) {
   messages.scrollTop = messages.scrollHeight;
   try {
     const data = await post("/api/buy", {messages: [...history, turn]});
-    const reply = assistantReply(data.response);
+    const clarification = data.clarification?.length > 0;
+    const reply = clarification ? data.clarification.join("\n") : assistantReply(data.response);
     history.push(turn, {role: "assistant", text: reply});
     query.value = "";
     waiting.replaceWith(bubble("assistant", reply));
     messages.scrollTop = messages.scrollHeight;
     renderEvidence(data);
-    renderResults(data);
+    if (clarification) {
+      results.replaceChildren();
+      results.hidden = true;
+    } else {
+      renderResults(data);
+    }
     reset.hidden = false;
-    send.textContent = data.response.status === "clarify" ? "Ответить" : "Уточнить подбор";
+    send.textContent = clarification || data.response.status === "clarify" ? "Ответить" : "Уточнить подбор";
   } catch (error) {
     user.remove();
     waiting.remove();

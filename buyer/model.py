@@ -13,8 +13,9 @@ from http.client import HTTPException
 from urllib.parse import urlsplit
 
 from buyer.anchors import categories_from_dialog
-from buyer.contracts import decode_json, read_requirements
+from buyer.contracts import Requirements, decode_json, read_requirements
 from buyer.prompt import SYSTEM
+from buyer.query_parser import Preference, normalize
 from llm.client import NoRedirect
 
 MAX_TEXT_BYTES = 32_768
@@ -33,7 +34,13 @@ class ModelTrace:
     prompt_tokens: int | None
     completion_tokens: int | None
     elapsed_ms: int
-    category_source: str
+    category_source: str = "Gemma"
+
+
+@dataclass(frozen=True)
+class ModelQuery:
+    requirements: Requirements
+    preferences: tuple[Preference, ...]
 
 
 def configuration():
@@ -57,17 +64,17 @@ def configuration():
     return settings
 
 
-def prepare_body(messages, model):
+def prepare_body(messages, model, *, full_history=False, use_anchors=True):
     anchor = categories_from_dialog(messages)
     system = SYSTEM
-    if anchor.categories is not None:
+    if use_anchors and anchor.categories is not None:
         system += "\nПроверенные словоформы категорий: " + ",".join(anchor.categories) + "."
     conversation = [{"role": "system", "content": system}]
     last_assistant = len(messages) - 2
     conversation.extend(
         {"role": message["role"], "content": message["text"]}
         for index, message in enumerate(messages)
-        if message["role"] == "user" or index == last_assistant
+        if full_history or message["role"] == "user" or index == last_assistant
     )
     if sum(len(message["content"].encode("utf-8")) for message in conversation) > MAX_TEXT_BYTES:
         raise ModelError("История превышает лимит байтов шлюза. Сократите реплики.")
@@ -128,12 +135,12 @@ def _tokens(usage, key):
     return value if type(value) is int and value >= 0 else None
 
 
-def interpret(messages):
+def extract(messages, *, full_history=False, use_anchors=True):
     settings = configuration()
     model = settings["LLM_MODEL"]
     request = urllib.request.Request(
         settings["LLM_BASE_URL"].rstrip("/") + "/chat/completions",
-        data=prepare_body(messages, model),
+        data=prepare_body(messages, model, full_history=full_history, use_anchors=use_anchors),
         headers={
             "Authorization": "Bearer " + settings["LLM_API_KEY"],
             "Content-Type": "application/json",
@@ -150,25 +157,28 @@ def interpret(messages):
         if choice.get("finish_reason") not in (None, "stop"):
             raise ValueError("Incomplete generation")
         extracted = decode_json(choice["message"]["content"])
+        soft = extracted.pop("preferences", [])
         for field in ("width_cm", "color_temperature_k"):
             value = extracted.get(field)
             if (isinstance(value, list) and len(value) == 2
                     and isinstance(value[0], str) and type(value[1]) in (int, Decimal)):
                 extracted[field] = [value]
         requirements = read_requirements(extracted)
-        anchor = categories_from_dialog(messages)
-        category_source = "Gemma"
-        if anchor.reason == "В запросе есть товар вне каталога":
-            extracted["categories"] = None
-            requirements = read_requirements(extracted)
-            category_source = "локальный словарь"
-        elif anchor.categories is not None and extracted["categories"] is not None:
-            extracted["categories"] = list(anchor.categories)
-            requirements = read_requirements(extracted)
-            category_source = "локальные словоформы"
+        preferences = _preferences(soft, messages)
         usage = envelope.get("usage", {})
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         raise ModelError("Gemma вернула неполный ответ или данные вне схемы условий.") from None
-    return requirements, ModelTrace(model, _tokens(usage, "prompt_tokens"),
-                                    _tokens(usage, "completion_tokens"),
-                                    round((time.monotonic() - started) * 1000), category_source)
+    return ModelQuery(requirements, preferences), ModelTrace(
+        model, _tokens(usage, "prompt_tokens"), _tokens(usage, "completion_tokens"),
+        round((time.monotonic() - started) * 1000)
+    )
+
+
+def _preferences(raw, messages):
+    if not isinstance(raw, list) or len(raw) > 12:
+        return ()
+    sources = [normalize(message["text"]) for message in messages if message["role"] == "user"]
+    return tuple(Preference(item["category"], item["text"].strip()) for item in raw
+                 if isinstance(item, dict) and item.get("category") in ("table", "chair", "lamp")
+                 and isinstance(item.get("text"), str) and 0 < len(item["text"].strip()) <= 120
+                 and any(normalize(item["text"]) in source for source in sources))

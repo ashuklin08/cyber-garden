@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 from buyer.contracts import decode_json, read_catalog, read_messages
-from buyer.model import ModelError, interpret
+from buyer.conversation import ConversationManager
+from buyer.model import ModelError, extract
 from buyer.selection import select
 
 
@@ -23,8 +24,8 @@ def main():
     try:
         request = read_messages(decode_json(sys.stdin.buffer.read()))
         listings = read_catalog(decode_json(args.catalog.read_bytes()))
-        requirements, _ = interpret(request)
-        response = select(listings, requirements).response
+        query, _ = ConversationManager().resolve(request, extract, require_model=True)
+        response = select(listings, query.requirements).response
     except ModelError as error:
         print(f"run: {error}", file=sys.stderr)
         return 2
