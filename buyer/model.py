@@ -7,10 +7,12 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from decimal import Decimal
 from email.utils import parsedate_to_datetime
 from http.client import HTTPException
 from urllib.parse import urlsplit
 
+from buyer.anchors import categories_from_dialog
 from buyer.contracts import decode_json, read_requirements
 from buyer.prompt import SYSTEM
 from llm.client import NoRedirect
@@ -31,6 +33,7 @@ class ModelTrace:
     prompt_tokens: int | None
     completion_tokens: int | None
     elapsed_ms: int
+    category_source: str
 
 
 def configuration():
@@ -55,15 +58,24 @@ def configuration():
 
 
 def prepare_body(messages, model):
-    conversation = [{"role": "system", "content": SYSTEM}]
-    conversation.extend({"role": message["role"], "content": message["text"]} for message in messages)
+    anchor = categories_from_dialog(messages)
+    system = SYSTEM
+    if anchor.categories is not None:
+        system += "\nПроверенные словоформы категорий: " + ",".join(anchor.categories) + "."
+    conversation = [{"role": "system", "content": system}]
+    last_assistant = len(messages) - 2
+    conversation.extend(
+        {"role": message["role"], "content": message["text"]}
+        for index, message in enumerate(messages)
+        if message["role"] == "user" or index == last_assistant
+    )
     if sum(len(message["content"].encode("utf-8")) for message in conversation) > MAX_TEXT_BYTES:
         raise ModelError("История превышает лимит байтов шлюза. Сократите реплики.")
     body = {
         "model": model,
         "messages": conversation,
         "temperature": 0,
-        "max_tokens": 512,
+        "max_tokens": 384,
         "response_format": {"type": "json_object"},
         "stream": False,
         "n": 1,
@@ -137,10 +149,26 @@ def interpret(messages):
         choice = envelope["choices"][0]
         if choice.get("finish_reason") not in (None, "stop"):
             raise ValueError("Incomplete generation")
-        requirements = read_requirements(decode_json(choice["message"]["content"]))
+        extracted = decode_json(choice["message"]["content"])
+        for field in ("width_cm", "color_temperature_k"):
+            value = extracted.get(field)
+            if (isinstance(value, list) and len(value) == 2
+                    and isinstance(value[0], str) and type(value[1]) in (int, Decimal)):
+                extracted[field] = [value]
+        requirements = read_requirements(extracted)
+        anchor = categories_from_dialog(messages)
+        category_source = "Gemma"
+        if anchor.reason == "В запросе есть товар вне каталога":
+            extracted["categories"] = None
+            requirements = read_requirements(extracted)
+            category_source = "локальный словарь"
+        elif anchor.categories is not None and extracted["categories"] is not None:
+            extracted["categories"] = list(anchor.categories)
+            requirements = read_requirements(extracted)
+            category_source = "локальные словоформы"
         usage = envelope.get("usage", {})
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         raise ModelError("Gemma вернула неполный ответ или данные вне схемы условий.") from None
     return requirements, ModelTrace(model, _tokens(usage, "prompt_tokens"),
                                     _tokens(usage, "completion_tokens"),
-                                    round((time.monotonic() - started) * 1000))
+                                    round((time.monotonic() - started) * 1000), category_source)

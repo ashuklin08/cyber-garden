@@ -64,6 +64,7 @@ function renderEvidence(data) {
     evidence.append(counts);
   }
   evidence.append(element("p", "model-trace", traceText(data.trace)));
+  evidence.append(element("p", "model-trace", "Категории · " + data.trace.category_source));
 }
 
 function buildOption(option, index, data) {

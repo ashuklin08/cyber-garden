@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
+from buyer.anchors import categories_from_dialog
 from buyer.contracts import ROOT, decode_json, read_catalog, read_messages, read_requirements
 from buyer.lab import CATALOG as LAB_CATALOG, compare, mutated_catalog
 from buyer.model import MAX_TEXT_BYTES, ModelError, prepare_body
@@ -23,6 +24,40 @@ def requirements(**updates):
 
 
 class InputsTest(unittest.TestCase):
+    def test_category_anchors_respect_changes_and_ambiguity(self):
+        def dialog(*turns):
+            return [{"role": "user" if index % 2 == 0 else "assistant", "text": text}
+                    for index, text in enumerate(turns)]
+
+        cases = [
+            (("Стол не шире метра, кресло и лампа в Таганроге.",),
+             ("table", "chair", "lamp")),
+            (("Нужна настольная лампа.",), ("lamp",)),
+            (("Стол и кресло.", "Подобрал комплект.", "Лампу добавь, стол больше не нужен."),
+             ("chair", "lamp")),
+            (("Кресло и лампа.", "Какой бюджет?", "Только стол, до 5000."),
+             ("table",)),
+            (("Стол и диван.",), None),
+            (("Стол или кресло.",), None),
+        ]
+        for turns, expected in cases:
+            with self.subTest(turns=turns):
+                self.assertEqual(categories_from_dialog(dialog(*turns)).categories, expected)
+
+    def test_model_receives_user_history_and_latest_assistant(self):
+        messages = [
+            {"role": "user", "text": "Стол и лампа. Таганрог."},
+            {"role": "assistant", "text": "Старое длинное объяснение."},
+            {"role": "user", "text": "Без лампы."},
+            {"role": "assistant", "text": "Какой бюджет на весь комплект?"},
+            {"role": "user", "text": "Пять тысяч."},
+        ]
+        body = decode_json(prepare_body(messages, "model"))
+        self.assertEqual([item["content"] for item in body["messages"][1:]],
+                         [messages[0]["text"], messages[2]["text"],
+                          messages[3]["text"], messages[4]["text"]])
+        self.assertLessEqual(body["max_tokens"], 384)
+
     def test_json_rejects_duplicates_nonfinite(self):
         for raw in ('{"n": 1, "n": 2}', '{"n": NaN}', '{"n": -Infinity}'):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
@@ -198,6 +233,30 @@ class CliTest(unittest.TestCase):
         done = self.invoke()
         self.assertNotEqual(done.returncode, 0)
         self.assertEqual(done.stdout, "")
+
+    def test_single_flat_comparison_is_repaired_without_changing_meaning(self):
+        self.model_output["width_cm"] = ["lte", 100]
+        done = self.invoke()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout)["options"][0]["listing_ids"], ["t80"])
+
+    def test_supported_category_anchor_does_not_hide_unsupported_product(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "catalog.json"
+            path.write_text(json.dumps(CATALOG), encoding="utf-8")
+            config = os.environ | {
+                "LLM_API_KEY": "stub-only", "LLM_MODEL": "stub-model", "LLM_USER_AGENT": "team-test/1.0",
+                "LLM_BASE_URL": f"http://127.0.0.1:{self.server.server_port}/v1",
+            }
+            done = subprocess.run(
+                [str(ROOT / "run"), "--catalog", str(path)], cwd=directory,
+                input='{"messages":[{"role":"user","text":"Нужны стол и диван в Таганроге до 6000 ₽"}]}',
+                text=True, capture_output=True, timeout=10, env=config,
+            )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        response = json.loads(done.stdout)
+        self.assertEqual(response["status"], "clarify")
+        self.assertEqual([question["field"] for question in response["questions"]], ["categories"])
 
     def test_invalid_catalog_fails_before_network(self):
         done = self.invoke([CATALOG[0], CATALOG[0]])
