@@ -18,13 +18,11 @@ npm run dev
 
 Откройте адрес `http://127.0.0.1:8765`, который появится в терминале. Для другого порта используйте `npm run dev -- --port 8766`. npm-пакеты устанавливать не нужно.
 
-Чтобы включить вызовы Gemma в веб-демо, задайте выданные организатором настройки только в локальном PowerShell-сеансе:
+Для первого запуска с Gemma на новом компьютере скопируйте шаблон из корня репозитория. В Блокноте заполните `LLM_API_KEY` выданным ключом, сохраните файл и запустите демо. Адрес шлюза в шаблоне уже записан в нужном формате.
 
 ```powershell
-$env:LLM_BASE_URL = "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1"
-$env:LLM_MODEL = "google/gemma-4-31B-it"
-$env:LLM_API_KEY = "<ключ вашей команды>"
-$env:LLM_USER_AGENT = "team-06/1.0"
+if (!(Test-Path .env)) { Copy-Item team/.env.example .env }
+notepad .env
 npm run dev
 ```
 
@@ -36,9 +34,6 @@ npm run dev
 umask 077
 cp team/.env.example .env
 # Впишите выданный организатором ключ в LLM_API_KEY в локальном .env.
-set -a
-source ./.env
-set +a
 ```
 
 | Переменная | Назначение |

@@ -13,7 +13,7 @@ from http.client import HTTPException
 from urllib.parse import urlsplit
 
 from buyer.anchors import categories_from_dialog
-from buyer.contracts import Requirements, decode_json, read_requirements
+from buyer.contracts import ROOT, Requirements, decode_json, read_requirements
 from buyer.prompt import SYSTEM
 from buyer.query_parser import Preference, normalize
 from llm.client import NoRedirect
@@ -45,9 +45,28 @@ class ModelQuery:
 
 def configuration():
     settings = {name: os.environ.get(name, "").strip() for name in SETTINGS}
+    if not all(settings.values()):
+        local = {}
+        try:
+            lines = (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines()
+        except FileNotFoundError:
+            lines = []
+        except (OSError, UnicodeError):
+            raise ModelError("Не удалось прочитать .env в корне проекта. Сохраните файл в UTF-8.") from None
+        for line in lines:
+            name, sep, value = line.partition("=")
+            if sep and name.strip() in SETTINGS:
+                value = value.strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                    value = value[1:-1]
+                local[name.strip()] = value
+        # Keep a file credential bound to its configured gateway.
+        if settings["LLM_BASE_URL"] and settings["LLM_BASE_URL"].rstrip("/") != local.get("LLM_BASE_URL", "").rstrip("/"):
+            local.pop("LLM_API_KEY", None)
+        settings = {name: value or local.get(name, "") for name, value in settings.items()}
     missing = [name for name in SETTINGS if not settings[name]]
     if missing:
-        raise ModelError("Задайте переменные окружения " + ", ".join(missing) + ".")
+        raise ModelError("Заполните .env в корне проекта или задайте переменные окружения: " + ", ".join(missing) + ".")
     try:
         base = urlsplit(settings["LLM_BASE_URL"])
         _ = base.port
