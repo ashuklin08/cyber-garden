@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 from buyer.contracts import CATEGORIES, FEATURES, read_catalog
 from buyer.selection import Selection, _explain, matches, select
+from buyer.ranking import ALIASES
 
 
 class SearchError(RuntimeError):
@@ -61,8 +62,6 @@ def limits(req, category):
 
 
 # Small Russian vocabulary validated by bench.quality, used only for positive wishes.
-ALIASES = {"деревян": "дерево массив сосна", "мягк": "мягкое мягкая обивка",
-           "светодиод": "LED", "углов": "угловой", "эргоном": "эргономика поясничная"}
 ORDER = [{"price_rub": "asc"}, {"id": "asc"}]
 
 

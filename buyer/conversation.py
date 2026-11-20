@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from buyer.anchors import WORDS, categories_from_dialog
 from buyer.contracts import Requirements, read_requirements
 from buyer.query_parser import ATTRIBUTES, CITIES_RE, CORE, OWNER, Preference, normalize, parse_turn, tighten
+from buyer.preferences import category_text, evolve, grounded
 
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
              adjustable_height=None, color_temperature_k=[])
@@ -126,8 +127,9 @@ class ConversationManager:
 
             current = read_requirements(values)
             turn = parse_turn(message["text"], pending, current)
-            recognized, categories = _category_update(text, current.categories, "categories" in pending)
-            mentions = any(pattern.search(text) for pattern in WORDS.values())
+            composition = category_text(text)
+            recognized, categories = _category_update(composition, current.categories, "categories" in pending)
+            mentions = any(pattern.search(composition) for pattern in WORDS.values())
             if recognized:
                 turn.values["categories"] = categories
             elif mentions or "categories" in pending:
@@ -166,7 +168,7 @@ class ConversationManager:
                 ambiguous_attributes.discard(field)
                 if field in ATTRIBUTES and (value is None or value == []):
                     preferences = tuple(item for item in preferences if item.attribute != field)
-            preferences = tuple(dict.fromkeys((*preferences, *turn.preferences)))
+            preferences = evolve(preferences, turn.preferences, text)
             if new_categories is not None:
                 preferences = _filter_preferences(preferences, new_categories)
 
@@ -178,12 +180,15 @@ class ConversationManager:
                           frozenset(confirmed), frozenset(unresolved),
                           frozenset(ambiguous_attributes), needs_model)
 
-    def merge(self, local, model):
+    def merge(self, local, model, messages=()):
         fields = {field: getattr(local.requirements, field)
                   for field in local.confirmed | local.ambiguous_attributes}
         requirements = replace(model.requirements, **fields)
+        preferences = (evolve(tuple(pref for pref in local.preferences if pref.attribute),
+                              grounded((*local.preferences, *model.preferences), messages), "")
+                       if messages else evolve(local.preferences, model.preferences, ""))
         return replace(local, requirements=requirements, preferences=_filter_preferences(
-            (*local.preferences, *model.preferences), requirements.categories
+            preferences, requirements.categories
         ))
 
     def resolve(self, messages, gemma, *, require_model):
@@ -191,4 +196,4 @@ class ConversationManager:
         if not require_model and not local.needs_model:
             return local, None
         model, trace = gemma(messages, full_history=local.needs_model)
-        return self.merge(local, model), trace
+        return self.merge(local, model, messages), trace

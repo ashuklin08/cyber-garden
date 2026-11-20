@@ -25,7 +25,7 @@ def main():
         request = read_messages(decode_json(sys.stdin.buffer.read()))
         listings = read_catalog(decode_json(args.catalog.read_bytes()))
         query, _ = ConversationManager().resolve(request, extract, require_model=True)
-        response = select(listings, query.requirements).response
+        response = select(listings, query.requirements, query.preferences).response
     except ModelError as error:
         print(f"run: {error}", file=sys.stderr)
         return 2
@@ -38,6 +38,7 @@ def main():
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGALRM, _timeout)
-    signal.alarm(115)
+    if hasattr(signal, "SIGALRM"):
+        signal.signal(signal.SIGALRM, _timeout)
+        signal.alarm(115)
     raise SystemExit(main())

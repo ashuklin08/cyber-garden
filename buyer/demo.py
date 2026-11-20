@@ -151,7 +151,7 @@ class Handler(BaseHTTPRequestHandler):
             found = self.server.provider.search(requirements, query.preferences)
             result, listings, titles = found.selection, found.listings, found.titles
         else:
-            result = select(listings, requirements)
+            result = select(listings, requirements, query.preferences)
         items = {
             listing_id for option in (result.response.get("options", []) if result else [])
             for listing_id in option["listing_ids"]

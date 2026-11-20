@@ -5,6 +5,7 @@ import operator
 from dataclasses import dataclass
 
 from buyer.contracts import CATEGORIES, CITIES
+from buyer.ranking import listing_scores, ranked_bundles
 
 CHECK = {"eq": operator.eq, "lt": operator.lt, "lte": operator.le,
          "gt": operator.gt, "gte": operator.ge}
@@ -62,11 +63,12 @@ class Selection:
 def _cheapest(groups, budget):
     """Monotone price grid. The cheapest unseen tuple is on the heap frontier."""
     start = (0,) * len(groups)
-    frontier = [(sum(group[0].price_rub for group in groups), start)]
+    frontier = [(sum(group[0].price_rub for group in groups),
+                 tuple(group[0].id for group in groups), start)]
     seen = {start}
     emitted = 0
     while frontier and emitted < 3:
-        total, indices = heapq.heappop(frontier)
+        total, _, indices = heapq.heappop(frontier)
         if total > budget:
             break
         yield total, tuple(group[i] for group, i in zip(groups, indices))
@@ -79,7 +81,8 @@ def _cheapest(groups, budget):
                 continue
             seen.add(next_indices)
             next_total = total + group[index + 1].price_rub - group[index].price_rub
-            heapq.heappush(frontier, (next_total, next_indices))
+            ids = tuple(group[i].id for group, i in zip(groups, next_indices))
+            heapq.heappush(frontier, (next_total, ids, next_indices))
 
 
 def _explain(items, total, requirements):
@@ -127,15 +130,8 @@ def _no_candidates(by_category, unavailable, requirements):
     return f"Город самовывоза — {city}. " + ". ".join(s[0].upper() + s[1:] for s in reasons) + ". " + suggestion
 
 
-def select(listings, requirements):
-    questions = [
-        {"field": field, "text": question}
-        for field, question in QUESTIONS.items()
-        if getattr(requirements, field) is None or (field == "categories" and not requirements.categories)
-    ]
-    if questions:
-        return Selection({"status": "clarify", "questions": questions}, {}, None)
-
+def filter_listings(listings, requirements):
+    """Strict structured facts only; text and preferences never enter this step."""
     by_category = {key: [] for key in requirements.categories}
     for item in listings:
         if item.city_id == requirements.city_id and item.category in by_category:
@@ -145,6 +141,19 @@ def select(listings, requirements):
                     key=lambda item: (item.price_rub, item.id))
         for key, items in by_category.items()
     }
+    return by_category, eligible
+
+
+def select(listings, requirements, preferences=()):
+    questions = [
+        {"field": field, "text": question}
+        for field, question in QUESTIONS.items()
+        if getattr(requirements, field) is None or (field == "categories" and not requirements.categories)
+    ]
+    if questions:
+        return Selection({"status": "clarify", "questions": questions}, {}, None)
+
+    by_category, eligible = filter_listings(listings, requirements)
     counts = {key: len(items) for key, items in eligible.items()}
     unavailable = [key for key, count in counts.items() if count == 0]
     if unavailable:
@@ -161,9 +170,12 @@ def select(listings, requirements):
                    "Можно увеличить бюджет до этой суммы или изменить одно из требований. Что вам удобнее?")
         return Selection({"status": "no_match", "message": message}, counts, minimum)
 
+    scores = listing_scores(eligible, preferences) if preferences else {}
+    bundles = (ranked_bundles(groups, requirements.budget_rub, scores) if any(scores.values())
+               else _cheapest(groups, requirements.budget_rub))
     options = [
         {"listing_ids": [item.id for item in items], "total_rub": total,
          "explanation": _explain(items, total, requirements)}
-        for total, items in _cheapest(groups, requirements.budget_rub)
+        for total, items in bundles
     ]
     return Selection({"status": "ok", "options": options}, counts, minimum)

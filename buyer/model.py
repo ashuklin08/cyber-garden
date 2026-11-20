@@ -15,7 +15,8 @@ from urllib.parse import urlsplit
 from buyer.anchors import categories_from_dialog
 from buyer.contracts import ROOT, Requirements, decode_json, read_requirements
 from buyer.prompt import SYSTEM
-from buyer.query_parser import Preference, normalize
+from buyer.query_parser import Preference
+from buyer.preferences import grounded
 from llm.client import NoRedirect
 
 MAX_TEXT_BYTES = 32_768
@@ -196,8 +197,6 @@ def extract(messages, *, full_history=False, use_anchors=True):
 def _preferences(raw, messages):
     if not isinstance(raw, list) or len(raw) > 12:
         return ()
-    sources = [normalize(message["text"]) for message in messages if message["role"] == "user"]
-    return tuple(Preference(item["category"], item["text"].strip()) for item in raw
-                 if isinstance(item, dict) and item.get("category") in ("table", "chair", "lamp")
-                 and isinstance(item.get("text"), str) and 0 < len(item["text"].strip()) <= 120
-                 and any(normalize(item["text"]) in source for source in sources))
+    return grounded(tuple(Preference(item["category"], item["text"].strip()) for item in raw
+                          if isinstance(item, dict) and item.get("category") in ("table", "chair", "lamp")
+                          and isinstance(item.get("text"), str) and 0 < len(item["text"].strip()) <= 120), messages)

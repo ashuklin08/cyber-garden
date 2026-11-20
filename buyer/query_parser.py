@@ -69,7 +69,7 @@ RELATIVE_BUDGET = re.compile(r"\b(?:на\s+[^,.!?]{1,32}\s+(?:меньше|бо�
 SPLIT = re.compile(r"[!?;\n]+|\.(?!\d)|,(?!\d)|\s+\b(?:а|но)\b\s+")
 QUALITIES = {
     "table": r"компьютерн\w*|письменн\w*|деревянн\w*|углов\w*",
-    "chair": r"удобн\w*|эргономичн\w*|мягк\w*|офисн\w*",
+    "chair": r"удобн\w*|эргономичн\w*|мягк\w*|офисн\w*|кожан\w*",
     "lamp": r"настольн\w*|светодиодн\w*|тепл\w*|холодн\w*",
 }
 CONTEXT = re.compile(r"\b(?:как\s+раньше|как\s+в\s+первом|(?:первый|второй|третий)\s+вариант|"
@@ -295,7 +295,8 @@ def parse_turn(message, pending, current):
                 owner = next(iter(categories))
             hint = SOFT.search(fragment)
             for key, pattern in QUALITIES.items():
-                if key in categories:
+                if key in categories or (not categories and owner == key) or (
+                        not categories and hint and key in active):
                     turn.preferences.extend(Preference(key, hit[0]) for hit in re.finditer(pattern, fragment))
             for attr, words in FEATURE_WORDS.items():
                 category = OWNER[attr]

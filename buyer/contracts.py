@@ -1,7 +1,7 @@
 """Contracts for buyer messages, AI interpretation and projected catalog records."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
@@ -66,6 +66,10 @@ class Listing:
     city_id: str
     price_rub: int
     feature: int | bool | None
+    # Passive search material, never a source of structured facts. Excluded from
+    # fact equality so existing catalog-isolation checks retain their meaning.
+    title: str = field(default="", compare=False)
+    description: str = field(default="", compare=False)
 
 
 def read_catalog(data):
@@ -97,7 +101,7 @@ def read_catalog(data):
             else:
                 values[field] = _integer(value, 1)
         listings.append(Listing(listing_id, category, city, _integer(item["price_rub"], 1),
-                                values.get(FEATURES[category])))
+                                values.get(FEATURES[category]), item["title"], item["description"]))
         seen.add(listing_id)
     return tuple(listings)
 

@@ -16,6 +16,7 @@ from buyer.lab import CATALOG as LAB_CATALOG, compare, mutated_catalog
 from buyer.model import MAX_TEXT_BYTES, ModelError, prepare_body
 from buyer.selection import select
 from tests.fixtures import CATALOG, product
+from tests.cli_support import cli_command
 
 
 def requirements(**updates):
@@ -193,7 +194,7 @@ class CliTest(unittest.TestCase):
         self.addCleanup(self.worker.join)
         self.addCleanup(self.server.shutdown)
 
-    def invoke(self, catalog=CATALOG):
+    def invoke(self, catalog=CATALOG, text="table please", messages=None):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "random-name.json"
             path.write_text(json.dumps(catalog), encoding="utf-8")
@@ -201,9 +202,9 @@ class CliTest(unittest.TestCase):
                 "LLM_API_KEY": "stub-only", "LLM_MODEL": "stub-model", "LLM_USER_AGENT": "team-test/1.0",
                 "LLM_BASE_URL": f"http://127.0.0.1:{self.server.server_port}/v1",
             }
-            return subprocess.run([str(ROOT / "run"), "--catalog", str(path)], cwd=directory,
-                                  input='{"messages":[{"role":"user","text":"table please"}]}',
-                                  text=True, capture_output=True, timeout=10, env=config)
+            return subprocess.run(cli_command(ROOT / "run", "--catalog", path), cwd=directory,
+                                  input=json.dumps({"messages": messages or [{"role": "user", "text": text}]}),
+                                  text=True, encoding="utf-8", capture_output=True, timeout=10, env=config)
 
     def test_end_to_end_uses_current_catalog_and_environment(self):
         catalog = [dict(CATALOG[0], title="private-catalog-text", description="SELLER_INSTRUCTION"),
@@ -249,9 +250,9 @@ class CliTest(unittest.TestCase):
                 "LLM_BASE_URL": f"http://127.0.0.1:{self.server.server_port}/v1",
             }
             done = subprocess.run(
-                [str(ROOT / "run"), "--catalog", str(path)], cwd=directory,
+                cli_command(ROOT / "run", "--catalog", path), cwd=directory,
                 input='{"messages":[{"role":"user","text":"Нужны стол и диван в Таганроге до 6000 ₽"}]}',
-                text=True, capture_output=True, timeout=10, env=config,
+                text=True, encoding="utf-8", capture_output=True, timeout=10, env=config,
             )
         self.assertEqual(done.returncode, 0, done.stderr)
         response = json.loads(done.stdout)
