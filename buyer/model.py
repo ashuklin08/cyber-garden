@@ -233,7 +233,8 @@ def extract(messages, *, full_history=False, use_anchors=True):
                 raise ValueError("Invalid city ID")
             if location is None or location["type"] != "city":
                 mentions = list(PROPER_LOCATION.finditer(messages[-1]["text"]))
-                location = dict(name=mentions[-1]["name"] if mentions else raw_city, type="city", city_id=raw_city)
+                location = (dict(name=mentions[-1]["name"], type="city", city_id=None)
+                            if mentions else None)
             extracted["city_id"] = None
         requested = extracted.pop("requested_categories", None)
         if requested is not None:

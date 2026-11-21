@@ -120,6 +120,12 @@ def _correct_product(match):
 
 def _correct_buyer_text(text):
     # «столь» is also an adverb. Require an item slot with a clear right boundary.
+    text = re.sub(r"\bлумп([ауые])\b", r"ламп\1", text, flags=re.I)
+    text = re.sub(r"\b(?:в|из)\s+тагане\b", "в Таганроге", text, flags=re.I)
+    text = re.sub(r"\bсотк[ау]\s+руб(?:асов|ликов)\b", "100 рублей", text, flags=re.I)
+    if re.search(r"\b(?:найди|подбери|подыщи|ищу)\b", text, re.I):
+        text = re.sub(r"\bза\s+(\d+(?:[.,]\d+)?)\s+руб\w*\b",
+                      r"бюджет \1 рублей", text, flags=re.I)
     text = _TABLE_TYPO.sub(r"\1стол", text)
     text = _PRODUCT_TYPO.sub(_correct_product, text)
     text = _INITIAL_PRODUCT_TYPO.sub(_correct_product, text)
@@ -169,6 +175,12 @@ class LocalState:
     unsupported_city: str | None = None
 
     def decision_questions(self):
+        if any(re.search(r"(.)\1{2,}", item) for item in self.unsupported_items):
+            return ({"field": "categories", "text":
+                     "Не удалось разобрать название товара. Пожалуйста, напишите его ещё раз."},)
+        if self.turn_issue == "lumens":
+            return ({"field": "categories", "text":
+                     "В каталоге нет данных о яркости в люменах. Подобрать лампу без этого требования?"},)
         if self.turn_issue in {"distance", "unsupported_size"}:
             name = "Расстояние" if self.turn_issue == "distance" else "Указанный размер (высота, длина или глубина)"
             return ({"field": "categories", "text": name +
@@ -326,6 +338,9 @@ class ConversationManager:
             composition = category_text(text)
             switching_product = bool(re.search(
                 r"\b(?:а\s+)?что\s+(?:насчет|насчёт|по\s+поводу)\s+", composition))
+            switching_product |= bool(
+                current.categories and re.search(r"\bподыщи\b", composition)
+                and not re.search(r"\b(?:еще|добавь|также)\b", composition))
             composition_history.append({"role": "user", "text": composition})
             anchor = categories_from_dialog(composition_history)
             recognized, categories = _category_update(composition, current.categories, "categories" in pending)
@@ -405,6 +420,9 @@ class ConversationManager:
                 preferences = _filter_preferences(preferences, new_categories)
             if unsupported_measurement(text):
                 turn_issue = unsupported_measurement(text)
+                needs_model = True
+            if re.search(r"\bлюмен\w*\b", text):
+                turn_issue = "lumens"
                 needs_model = True
 
         # An uncertain last edit cannot reuse the old value in a local-only result.

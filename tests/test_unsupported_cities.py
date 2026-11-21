@@ -142,6 +142,10 @@ class UnsupportedCitiesTest(unittest.TestCase):
         self.assertIsNone(model.requirements.city_id)
         state, body = self.resolve(dialog("Стол в Москве"), model)
         self.assert_refusal(state, body, "Москве")
+        with patch("buyer.model.configuration", return_value=config), patch("buyer.model._gateway", return_value=raw):
+            model, _ = extract(dialog("здарова брат, надо столик найти"))
+        self.assertIsNone(model.requirements.city_id)
+        self.assertIsNone(model.requested_location)
 
 
 if __name__ == "__main__":
