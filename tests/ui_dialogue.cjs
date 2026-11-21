@@ -23,10 +23,20 @@ function create(speech = 'standard') {
   byId('messages').append(byId('starter'));
   const requests = [];
   const replies = [];
-  const visualRequests = [], visualReplies = [], revokedURLs = [];
+  const visualRequests = [], visualReplies = [], revokedURLs = [], healthReplies = [], healthRequests = [], demoRequests = [], demoReplies = [];
+  const timers = new Map(); let nextTimer = 0;
   let objectNumber = 0;
   class MockFormData { constructor() {this.items = [];} append(...args) {this.items.push(args);} }
-  class MockAbortController { constructor() {this.signal = {aborted: false};} abort() {this.signal.aborted = true;} }
+  class MockAbortController { constructor() {this.signal = {aborted: false};} abort() {this.signal.aborted = true; this.signal.onabort?.();} }
+  async function abortable(reply, signal) {
+    if (!signal) return await reply;
+    return await Promise.race([Promise.resolve(reply), new Promise((_, reject) => {
+      signal.onabort = () => reject(new Error('aborted'));
+      if (signal.aborted) signal.onabort();
+    })]);
+  }
+  const ready = {status: 'ready', message: 'Фото-поиск готов', coverage: {indexed: 3, total: 111},
+    examples: [{name: 'table', label: 'Стол', url: '/visual-demo/table'}, {name: 'landscape', label: 'Пейзаж', url: '/visual-demo/landscape'}]};
   const recognitions = [];
   class Recognition {
     constructor() { recognitions.push(this); this.starts = 0; this.stops = 0; this.aborts = 0; }
@@ -42,12 +52,23 @@ function create(speech = 'standard') {
   const window = speech === 'none' ? {} : {[speech === 'webkit' ? 'webkitSpeechRecognition' : 'SpeechRecognition']: Recognition};
   const context = vm.createContext({window, document: {getElementById: byId, createElement: tag => new Node(tag)}, Intl,
     FormData: MockFormData, AbortController: MockAbortController,
+    setTimeout: fn => {const id = ++nextTimer; timers.set(id, fn); return id;}, clearTimeout: id => timers.delete(id),
     URL: {createObjectURL: () => 'blob:demo-' + ++objectNumber, revokeObjectURL: url => revokedURLs.push(url)},
     fetch: async (path, options) => {
       if (path === '/api/catalog') return {ok: true, json: async () => ({total: 1, cities: ['Таганрог']})};
+      if (path === '/api/visual-status') {
+        healthRequests.push(path);
+        const result = await abortable(healthReplies.length ? healthReplies.shift() : ready, options?.signal);
+        return {ok: true, json: async () => result};
+      }
+      if (path.startsWith('/visual-demo/')) {
+        demoRequests.push(path);
+        const blob = await abortable(demoReplies.length ? demoReplies.shift() : {size: 1234, type: 'image/png'}, options?.signal);
+        return {ok: true, blob: async () => blob};
+      }
       if (path === '/api/visual-search') {
         visualRequests.push(options);
-        const result = await visualReplies.shift();
+        const result = await abortable(visualReplies.shift(), options?.signal);
         return {ok: !result?.httpError, json: async () => result};
       }
       requests.push(JSON.parse(options.body));
@@ -61,7 +82,8 @@ function create(speech = 'standard') {
     items: {t: {category: 'Стол', category_id: 'table', title: 'Стол', price_rub: 1000, city: 'Таганрог'}}};
   const ok = {...state, response: {status: 'ok', options: [{listing_ids: ['t'], total_rub: 1000, explanation: 'Проверено'}]}};
   byId('visual-panel').hidden = true;
-  return {byId, context, requests, replies, state, ok, recognitions, window, visualRequests, visualReplies, revokedURLs};
+  return {byId, context, requests, replies, state, ok, recognitions, window, visualRequests, visualReplies, revokedURLs,
+    healthReplies, healthRequests, demoRequests, demoReplies, ready, timers};
 }
 async function main() {
   const failures = [];
@@ -398,6 +420,73 @@ async function main() {
     await t.byId('visual-search').handlers.click();
     assert.match(t.byId('visual-status').textContent, /обычным поиском/);
     t.replies.push(t.ok); await t.context.submit('Стол'); assert.equal(t.requests.length, 1);
+  });
+  async function openPhoto(t) {
+    t.byId('visual-toggle').handlers.click();
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  await test('photo readiness is checked only on opening and shows honest coverage', async () => {
+    const t = create(); assert.equal(t.healthRequests.length, 0);
+    await openPhoto(t);
+    assert.equal(t.healthRequests.length, 1); assert.match(t.byId('visual-readiness').textContent, /3 из 111/);
+    assert.equal(t.byId('visual-examples').children.length, 2);
+    assert.equal(t.byId('visual-setup').hidden, true);
+    assert.equal(t.requests.length + t.visualRequests.length, 0);
+  });
+  await test('demo sample fills preview but never auto-submits a photo or dialogue', async () => {
+    const t = create(); t.byId('query').value = 'Мой текст'; await openPhoto(t);
+    await t.byId('visual-examples').children[0].handlers.click();
+    assert.deepEqual(t.demoRequests, ['/visual-demo/table']);
+    assert.equal(t.byId('visual-search').disabled, false);
+    assert.equal(t.byId('query').value, 'Мой текст');
+    assert.equal(t.requests.length + t.visualRequests.length, 0);
+    t.visualReplies.push(photoResult()); await t.byId('visual-search').handlers.click();
+    assert.equal(t.visualRequests.length, 1);
+  });
+  await test('not-ready photo mode explains setup while ordinary input stays usable', async () => {
+    const t = create(); t.healthReplies.push({status: 'visual_unavailable', message: 'Фото-поиск не подготовлен', setup_hint: 'Подготовьте индекс'});
+    await openPhoto(t);
+    assert.equal(t.byId('visual-setup').hidden, false);
+    assert.equal(t.byId('visual-setup-hint').textContent, 'Подготовьте индекс');
+    t.replies.push(t.ok); await t.context.submit('Стол'); assert.equal(t.requests.length, 1);
+  });
+  await test('photo request deadline aborts a hung response and restores controls', async () => {
+    const t = create(); choosePhoto(t); t.visualReplies.push(new Promise(() => {}));
+    const pending = t.byId('visual-search').handlers.click();
+    for (const callback of t.timers.values()) callback();
+    await pending;
+    assert.equal(t.byId('visual-search').disabled, false);
+    assert.match(t.byId('visual-status').textContent, /временно недоступен/);
+    assert.equal(t.timers.size, 0);
+  });
+  await test('a late demo sample cannot overwrite a manually selected photo', async () => {
+    const t = create(); await openPhoto(t); let release;
+    t.demoReplies.push(new Promise(resolve => {release = resolve;}));
+    const pending = t.byId('visual-examples').children[0].handlers.click();
+    const manual = choosePhoto(t); release({size: 321, type: 'image/png'}); await pending;
+    t.visualReplies.push(photoResult()); await t.byId('visual-search').handlers.click();
+    assert.equal(t.visualRequests[0].body.items[0][1], manual);
+  });
+  await test('readiness rejects remote URLs in demo example metadata', async () => {
+    const t = create(); t.healthReplies.push({...t.ready, examples: [{label: 'X', url: 'https://untrusted.example/photo'}]});
+    await openPhoto(t); assert.equal(t.byId('visual-examples').children.length, 0);
+    assert.equal(t.demoRequests.length, 0);
+  });
+  await test('readiness can recover after setup without resetting the dialogue', async () => {
+    const t = create(); t.healthReplies.push({status: 'visual_unavailable', message: 'Нет индекса'});
+    t.byId('query').value = 'Сохранённый запрос'; await openPhoto(t);
+    t.healthReplies.push(t.ready); await t.byId('visual-recheck').handlers.click();
+    assert.equal(t.byId('visual-setup').hidden, true);
+    assert.equal(t.byId('visual-readiness').attributes['data-state'], 'ready');
+    assert.equal(t.byId('query').value, 'Сохранённый запрос');
+  });
+  await test('pending readiness prevents a competing upload and duplicate checks', async () => {
+    const t = create(); let release; t.healthReplies.push(new Promise(resolve => {release = resolve;}));
+    await openPhoto(t); choosePhoto(t);
+    assert.equal(t.byId('visual-search').disabled, true);
+    await t.byId('visual-recheck').handlers.click(); assert.equal(t.healthRequests.length, 1);
+    release(t.ready); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(t.byId('visual-search').disabled, false);
   });
   console.log(`Completed ${executed} dialogue, speech and photo scenarios; failures: ${failures.length}`);
   assert.equal(failures.length, 0, failures.join(', '));

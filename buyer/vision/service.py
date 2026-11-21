@@ -3,18 +3,79 @@ import json
 import multiprocessing
 import os
 import time
+from threading import Event, Thread
 
-from buyer.vision.config import Config, UNAVAILABLE, safe_path
+from buyer.vision.config import Config, DEMO_IMAGES, UNAVAILABLE, safe_path
 
 
 def unavailable(code):
-    return dict(status="visual_unavailable", code=code, message=UNAVAILABLE)
+    actions = {
+        "missing_dependencies": "Установите дополнительные зависимости: requirements-vision.txt.",
+        "missing_model": "Скачайте веса: scripts/download_vision_model.py.",
+        "model_integrity": "Проверка весов не пройдена. Повторите скачивание модели.",
+        "missing_index": "Подготовьте индекс: scripts/prepare_visual_demo.py.",
+        "stale_index": "Изменились данные. Повторите подготовку визуального индекса.",
+        "stale_images": "Изменились изображения. Повторите подготовку визуального индекса.",
+        "missing_calibration": "Подготовьте калибровку: scripts/calibrate_visual_search.py.",
+        "stale_calibration": "Индекс обновился. Повторите калибровку визуального поиска.",
+        "no_current_ids": "Для объявлений текущего каталога пока нет демонстрационных фото.",
+        "invalid_manifest": "Повреждён manifest демонстрационных изображений.",
+        "timeout": "Обработка заняла слишком много времени. Попробуйте ещё раз.",
+    }
+    return dict(status="visual_unavailable", code=code, message=UNAVAILABLE,
+                setup_hint=actions.get(code, "Проверьте подготовку визуального модуля по README."))
+
+
+def demo_image(config, name):
+    relative, _ = DEMO_IMAGES[name]
+    path = safe_path(config.visual, relative)
+    if path.stat().st_size > 5 * 1024 * 1024:
+        raise ValueError("invalid_demo_image")
+    return path.read_bytes()
+
+
+def read_calibration(config, metadata):
+    path = config.visual / "calibration.json"
+    if not path.is_file():
+        raise FileNotFoundError("missing_calibration")
+    if path.stat().st_size > 128_000:
+        raise ValueError("stale_calibration")
+    calibration = json.loads(path.read_text(encoding="utf-8"))
+    threshold = calibration.get("threshold")
+    if (calibration.get("fingerprint") != metadata["fingerprint"] or type(threshold) not in (float, int)
+            or not -1 <= threshold <= 1 or not calibration.get("method")):
+        raise ValueError("stale_calibration")
+    if calibration.get("evaluation_sha256"):
+        from buyer.vision.index import manifest_sha256
+        evaluation = config.visual / "evaluation.json"
+        if not evaluation.is_file() or evaluation.stat().st_size > 128_000:
+            raise ValueError("stale_calibration")
+        if manifest_sha256(json.loads(evaluation.read_bytes())) != calibration["evaluation_sha256"]:
+            raise ValueError("stale_calibration")
+    return threshold
 
 
 class Engine:
     def __init__(self, config=Config()):
         self.config = config
         self.model = None
+
+    def status(self, catalog):
+        # Runs in the optional worker too: a broken native dependency must never
+        # load into the HTTP-server process. No inference session is created.
+        import importlib.util
+        if any(importlib.util.find_spec(name) is None for name in ("numpy", "PIL", "onnxruntime")):
+            raise ImportError("Optional vision packages missing")
+        from buyer.vision.index import load
+        from buyer.vision.model import verify_weights
+        _, rows, metadata = load(self.config, catalog)
+        read_calibration(self.config, metadata)
+        verify_weights(self.config.model)
+        examples = [dict(name=name, label=label, url="/visual-demo/" + name)
+                    for name, (relative, label) in DEMO_IMAGES.items()
+                    if safe_path(self.config.visual, relative).is_file()]
+        return dict(status="ready", message="Визуальный поиск готов. Выберите фото или демо-пример.",
+                    coverage=dict(indexed=len(rows), total=len(catalog)), examples=examples)
 
     def search(self, raw, catalog):
         from buyer.vision.image_validation import decode_image, InvalidImage
@@ -25,14 +86,7 @@ class Engine:
         # IDs are checked before inference or loading weights. A swapped catalog
         # cannot receive old listings, and prices are never copied from the index.
         vectors, rows, metadata = load(self.config, catalog)
-        calibration_path = self.config.visual / "calibration.json"
-        if not calibration_path.is_file():
-            return unavailable("missing_calibration")
-        calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
-        threshold = calibration.get("threshold")
-        if (calibration.get("fingerprint") != metadata["fingerprint"] or type(threshold) not in (float, int)
-                or not -1 <= threshold <= 1 or not calibration.get("method")):
-            return unavailable("stale_calibration")
+        threshold = read_calibration(self.config, metadata)
         if self.model is None:
             from buyer.vision.model import VisionModel
             self.model = VisionModel(self.config.model)
@@ -102,7 +156,7 @@ def worker(connection, config):
             if request is None:
                 break
             try:
-                result = engine.search(*request)
+                result = engine.status(request[1]) if request[0] == "status" else engine.search(*request)
             except ImportError:
                 result = unavailable("missing_dependencies")
             except Exception as error:
@@ -110,7 +164,7 @@ def worker(connection, config):
                 if isinstance(error, InvalidImage):
                     result = dict(status="invalid_image", message=str(error))
                 else:
-                    codes = {"missing_model", "missing_index", "missing_manifest", "no_current_ids", "stale_index", "stale_images",
+                    codes = {"missing_model", "missing_index", "missing_calibration", "stale_calibration", "missing_manifest", "no_current_ids", "stale_index", "stale_images",
                              "model_integrity", "invalid_manifest", "invalid_manifest_entry", "invalid_vectors",
                              "missing_or_large_product_image", "duplicate_product_image"}
                     code = str(error) if str(error) in codes else "invalid_visual_assets_or_model"
@@ -133,7 +187,14 @@ class VisualService:
         self.process = self.connection = None
 
     def search(self, raw, catalog):
+        return self._request((raw, catalog))
+
+    def status(self, catalog):
+        return self._request(("status", catalog), timeout=min(self.config.timeout, 8))
+
+    def _request(self, request, timeout=None):
         started = time.perf_counter()
+        deadline = started + (self.config.timeout if timeout is None else timeout)
         try:
             if self.process is None:
                 context = multiprocessing.get_context("spawn")
@@ -142,8 +203,26 @@ class VisualService:
                 self.connection = parent
                 self.process.start()
                 child.close()
-            self.connection.send((raw, catalog))
-            if not self.connection.poll(self.config.timeout):
+            # A pipe write can block too (e.g. a worker dying before reading a
+            # large upload). The deadline covers IPC, not only model inference.
+            connection = self.connection
+            sent, errors = Event(), []
+            def send_request():
+                try:
+                    connection.send(request)
+                except Exception as error:
+                    errors.append(error)
+                finally:
+                    sent.set()
+            sender = Thread(target=send_request, daemon=True)
+            sender.start()
+            if not sent.wait(max(0, deadline - time.perf_counter())):
+                self.close()
+                sender.join(.2)
+                return unavailable("timeout")
+            if errors:
+                raise errors[0]
+            if not self.connection.poll(max(0, deadline - time.perf_counter())):
                 self.close()
                 return unavailable("timeout")
             result = self.connection.recv()
@@ -154,16 +233,16 @@ class VisualService:
             return unavailable("worker_failure")
 
     def close(self):
-        if self.process:
-            try:
-                if self.connection:
-                    self.connection.send(None)
-            except (OSError, EOFError):
-                pass
-            self.process.join(.2)
-            if self.process.is_alive():
-                self.process.terminate()
-                self.process.join(1)
-        if self.connection:
-            self.connection.close()
+        process, connection = self.process, self.connection
         self.process = self.connection = None
+        if process:
+            try:
+                # Do not send a shutdown message through a possibly blocked
+                # pipe. The worker holds only read-only model/index resources.
+                if process.is_alive():
+                    process.terminate()
+                process.join(1)
+            except (OSError, ValueError, AssertionError):
+                pass
+        if connection:
+            connection.close()

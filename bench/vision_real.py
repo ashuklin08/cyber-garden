@@ -1,6 +1,8 @@
 """Real local CPU weights, separate holdout images and actual multipart HTTP API."""
 from http.client import HTTPConnection
+import argparse
 import json
+from pathlib import Path
 import threading
 import time
 from unittest.mock import patch
@@ -13,6 +15,9 @@ from buyer.contracts import decode_json
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=ROOT / "bench/results/vision-real.json")
+    args = parser.parse_args()
     config = Config()
     metadata, build_times = build(config, decode_json((ROOT / "data/catalog.json").read_bytes()))
     report = dict(model=MODEL_ID, revision=REVISION, weight_bytes=WEIGHT_BYTES, weight_sha256=WEIGHT_SHA256,
@@ -23,8 +28,29 @@ def main():
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": .01})
     thread.start()
     try:
+        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=15)
+        try:
+            connection.request("GET", "/api/visual-status")
+            response = connection.getresponse()
+            readiness = json.loads(response.read())
+            assert response.status == 200 and readiness["status"] == "ready", readiness
+            report["readiness"] = readiness
+        finally:
+            connection.close()
+        report["demo_images_served"] = 0
         for name, expected in (("table", "t12"), ("chair", "c04"), ("lamp", "l09"), ("cat", None), ("landscape", None)):
             raw = (config.visual / f"queries/{name}.png").read_bytes()
+            if name != "cat":
+                example = HTTPConnection("127.0.0.1", server.server_port, timeout=15)
+                try:
+                    example.request("GET", "/visual-demo/" + name)
+                    response = example.getresponse()
+                    served = response.read()
+                    assert response.status == 200 and served == raw
+                    report["demo_images_served"] += 1
+                    raw = served
+                finally:
+                    example.close()
             body = b'--vision-demo\r\nContent-Disposition: form-data; name="image"; filename="query.png"\r\nContent-Type: image/png\r\n\r\n' + raw + b"\r\n--vision-demo--\r\n"
             connection = HTTPConnection("127.0.0.1", server.server_port, timeout=40)
             started = time.perf_counter()
@@ -42,7 +68,8 @@ def main():
     finally:
         server.shutdown(); thread.join(); server.server_close()
     report["passed"] = sum(row["passed"] for row in report["cases"])
-    target = ROOT / "bench/results/vision-real.json"
+    target = args.output
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return int(report["passed"] != 5)
 

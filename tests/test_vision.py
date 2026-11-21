@@ -102,6 +102,50 @@ class VisionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             manifest_entries(self.config, self.catalog)
 
+    def test_git_line_endings_and_json_formatting_do_not_invalidate_index(self):
+        from buyer.vision.index import load
+        metadata = self.build()
+        formatted = json.dumps(dict(images=self.rows, version=1), indent=4).replace("\n", "\r\n")
+        (self.root / "manifest.json").write_bytes(formatted.encode())
+        _, rows, reloaded = load(self.config, self.catalog)
+        self.assertEqual(reloaded["fingerprint"], metadata["fingerprint"])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(self.engine().search(self.image(), self.catalog)["status"], "ok")
+
+    def test_readiness_does_not_create_inference_session(self):
+        from buyer.vision.service import Engine
+        self.build()
+        engine = Engine(self.config)
+        with patch("importlib.util.find_spec", return_value=object()), patch("buyer.vision.model.verify_weights"), patch("buyer.vision.model.VisionModel") as model:
+            result = engine.status(self.catalog)
+        model.assert_not_called()
+        self.assertIsNone(engine.model)
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["coverage"], dict(indexed=2, total=2))
+
+    def test_readiness_rejects_stale_calibration_before_demo(self):
+        from buyer.vision.service import Engine
+        self.build()
+        (self.root / "calibration.json").write_text('{"fingerprint":"wrong","threshold":0.5,"method":"fake"}')
+        with patch("importlib.util.find_spec", return_value=object()), self.assertRaisesRegex(ValueError, "stale_calibration"):
+            Engine(self.config).status(self.catalog)
+
+    def test_calibration_evaluation_is_content_bound_not_line_ending_bound(self):
+        from buyer.vision.index import manifest_sha256
+        from buyer.vision.service import read_calibration
+        metadata = self.build()
+        evaluation = dict(version=1, calibration=[dict(path="queries/a.png", listing_id="red")])
+        (self.root / "evaluation.json").write_bytes(json.dumps(evaluation, indent=2).replace("\n", "\r\n").encode())
+        path = self.root / "calibration.json"
+        calibration = json.loads(path.read_text())
+        calibration["evaluation_sha256"] = manifest_sha256(evaluation)
+        path.write_text(json.dumps(calibration))
+        self.assertEqual(read_calibration(self.config, metadata), .9)
+        evaluation["calibration"][0]["listing_id"] = "green"
+        (self.root / "evaluation.json").write_text(json.dumps(evaluation))
+        with self.assertRaisesRegex(ValueError, "stale_calibration"):
+            read_calibration(self.config, metadata)
+
     def test_unknown_id_is_excluded_not_invented(self):
         from buyer.vision.index import manifest_entries
         self.rows.append(dict(listing_id="not-real", path="products/missing.png", synthetic=True))

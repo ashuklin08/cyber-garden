@@ -12,6 +12,12 @@ PREPROCESSING = "nomic-v1.5-224x224-bicubic-rgb-cls-l2-v1"
 MAX_BYTES = 5 * 1024 * 1024
 MAX_SIDE = 2048
 UNAVAILABLE = "Визуальный поиск пока недоступен для текущего каталога. Вы можете воспользоваться обычным поиском."
+DEMO_IMAGES = {
+    "table": ("queries/table.png", "Стол"),
+    "chair": ("queries/chair.png", "Кресло"),
+    "lamp": ("queries/lamp.png", "Лампа"),
+    "landscape": ("queries/landscape.png", "Пейзаж · без совпадения"),
+}
 
 
 @dataclass(frozen=True)

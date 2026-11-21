@@ -3,13 +3,16 @@
 
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+const fs = require("node:fs");
 
 const root = path.resolve(__dirname, "..");
 const forwarded = process.argv.slice(2);
 const pythonArgs = ["-m", "buyer.demo", ...forwarded];
-const candidates = process.platform === "win32"
+const localPython = path.join(root, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+const systemCandidates = process.platform === "win32"
   ? [["py", ["-3", ...pythonArgs]], ["python", pythonArgs]]
   : [["python3", pythonArgs], ["python", pythonArgs]];
+const candidates = [...(fs.existsSync(localPython) ? [[localPython, pythonArgs]] : []), ...systemCandidates];
 
 function launch(index) {
   if (index >= candidates.length) {

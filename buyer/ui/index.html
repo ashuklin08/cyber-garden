@@ -35,6 +35,10 @@
       </section>
       <section class="pane visual-panel" id="visual-panel" aria-labelledby="visual-title" hidden>
         <div class="pane-heading"><div><h2 id="visual-title">Найдите похожий товар</h2><p>Дополнительный режим · не меняет ваш диалог</p></div></div>
+        <p id="visual-readiness" class="voice-status" role="status" aria-live="polite"></p>
+        <div id="visual-examples" class="visual-examples" aria-label="Демонстрационные примеры"></div>
+        <p class="voice-hint">Демо-примеры синтетические. Поиск выполняется локально; на текущем наборе покрыта только часть каталога.</p>
+        <details id="visual-setup" class="visual-setup" hidden><summary>Как подготовить демо</summary><p id="visual-setup-hint"></p><p>Инструкция установки и команда подготовки — в README проекта.</p><button id="visual-recheck" class="subtle" type="button">Проверить ещё раз</button></details>
         <div class="visual-upload" id="visual-drop">
           <label for="visual-file">Выберите фото или перетащите его сюда</label>
           <input id="visual-file" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="visual-help">

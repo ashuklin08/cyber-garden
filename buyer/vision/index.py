@@ -17,6 +17,12 @@ def catalog_sha(catalog):
     return sha(json.dumps(catalog, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode())
 
 
+def manifest_sha256(manifest):
+    # Git may rewrite LF to CRLF on checkout. Index identity describes content,
+    # never formatting, property order or the operating system's line endings.
+    return sha(json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode())
+
+
 def manifest_entries(config, catalog):
     from buyer.contracts import read_catalog
     listings = read_catalog(catalog)
@@ -50,7 +56,7 @@ def manifest_entries(config, catalog):
             raise ValueError("duplicate_product_image")
         seen_ids.add(row["listing_id"]); seen_paths.add(row["path"]); seen_hashes.add(digest)
         entries.append(dict(row, sha256=digest))
-    return entries, sha(raw)
+    return entries, manifest_sha256(manifest)
 
 
 def identity(entries, manifest_sha):

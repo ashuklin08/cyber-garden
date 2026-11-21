@@ -161,6 +161,25 @@ class VisionApiTest(unittest.TestCase):
         status, _ = self.request(headers={"Origin": "https://unrelated.example"})
         self.assertEqual(status, 403)
 
+    def test_readiness_and_demo_routes_do_not_call_gemma(self):
+        self.server.visual_service = Mock()
+        self.server.visual_service.status.return_value = dict(status="ready", coverage=dict(indexed=1, total=1))
+        with patch("buyer.demo.extract", side_effect=AssertionError("No NLU for visual readiness")):
+            status, result = self.request("/api/visual-status", b"", method="GET")
+        self.assertEqual((status, result["status"]), (200, "ready"))
+        self.server.visual_service.status.assert_called_once_with(self.server.catalog)
+        for path in ("/visual-demo/../../.env", "/visual-demo/unknown", "/visual-demo/table?file=.env"):
+            status, _ = self.request(path, b"", method="GET")
+            self.assertEqual(status, 404)
+
+    def test_readiness_unavailable_does_not_break_catalog(self):
+        self.server.visual_service = Mock()
+        self.server.visual_service.status.side_effect = ImportError("native dependency failed")
+        status, result = self.request("/api/visual-status", b"", method="GET")
+        self.assertEqual((status, result["status"]), (200, "visual_unavailable"))
+        status, _ = self.request("/api/catalog", b"", method="GET")
+        self.assertEqual(status, 200)
+
     def test_image_paths_not_in_manifest_cannot_be_served(self):
         status, _ = self.request("/visual-images/../catalog.json", b"", method="GET")
         self.assertEqual(status, 404)

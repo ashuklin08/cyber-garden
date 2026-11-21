@@ -94,6 +94,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Каталог временно недоступен."})
         elif self.path.startswith("/visual-images/"):
             self._visual_image()
+        elif self.path == "/api/visual-status":
+            self._visual_status()
+        elif self.path.startswith("/visual-demo/"):
+            self._visual_demo()
         elif asset and (UI / asset[0]).is_file():
             self._send(HTTPStatus.OK, (UI / asset[0]).read_bytes(), asset[1])
         else:
@@ -121,6 +125,31 @@ class Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.OK, path.read_bytes(), mime)
         except Exception:
             self._json(HTTPStatus.NOT_FOUND, {"error": "Изображение недоступно."})
+
+    def _visual_status(self):
+        if not self.server.visual_slot.acquire(blocking=False):
+            self._json(HTTPStatus.OK, {"status": "visual_busy", "message": "Визуальный поиск занят. Дождитесь окончания текущего запроса."})
+            return
+        try:
+            from buyer.vision.service import VisualService
+            if self.server.visual_service is None:
+                self.server.visual_service = VisualService()
+            result = self.server.visual_service.status(self.server.catalog)
+        except Exception:
+            result = {"status": "visual_unavailable", "code": "missing_module", "message":
+                "Визуальный поиск недоступен. Текстовый и голосовой поиск продолжают работать."}
+        finally:
+            self.server.visual_slot.release()
+        self._json(HTTPStatus.OK, result)
+
+    def _visual_demo(self):
+        try:
+            from buyer.vision.config import Config
+            from buyer.vision.service import demo_image
+            raw = demo_image(Config(), self.path.removeprefix("/visual-demo/"))
+            self._send(HTTPStatus.OK, raw, "image/png")
+        except Exception:
+            self._json(HTTPStatus.NOT_FOUND, {"error": "Демо-пример недоступен."})
 
     def _visual_request(self):
         # All optional imports live inside this route. Even deleting buyer/vision

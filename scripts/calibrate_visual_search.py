@@ -7,7 +7,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from buyer.contracts import ROOT, decode_json
 from buyer.vision.config import Config, MODEL_ID, REVISION, safe_path
-from buyer.vision.index import load, sha
+from buyer.vision.index import load, sha, manifest_sha256
 from buyer.vision.image_validation import decode_image
 from buyer.vision.model import VisionModel
 
@@ -45,7 +45,7 @@ def main():
                              row["top_id"] == row["expected_id"] and row["top_cosine"] >= threshold)
     report = dict(model=MODEL_ID, revision=REVISION, fingerprint=metadata["fingerprint"],
         method="midpoint_between_min_positive_and_max_negative_cosine_on_frozen_calibration_pairs",
-        evaluation_sha256=sha(evaluation_bytes), threshold=threshold,
+        evaluation_sha256=manifest_sha256(evaluation), threshold=threshold,
         min_positive=min(positives), max_negative=max(negatives),
         positive_pairs=len(positives), negative_pairs=len(negatives),
         limitations="Small synthetic demo only; no claim of production accuracy or calibrated probabilities.",

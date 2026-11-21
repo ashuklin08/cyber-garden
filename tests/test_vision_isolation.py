@@ -81,6 +81,25 @@ print("core imports without vision")
         process.terminate.assert_called_once()
         self.assertIsNone(service.process)
 
+    def test_worker_deadline_also_covers_a_blocked_pipe_write(self):
+        from threading import Event
+        from unittest.mock import Mock
+        try:
+            from buyer.vision.config import Config
+            from buyer.vision.service import VisualService
+        except ImportError:
+            self.skipTest("Visual module removed")
+        service = VisualService(Config(timeout=.01))
+        process, connection, released = Mock(), Mock(), Event()
+        service.process, service.connection = process, connection
+        connection.send.side_effect = lambda _: released.wait(2)
+        process.is_alive.return_value = True
+        process.terminate.side_effect = released.set
+        result = service.search(b"photo", [])
+        self.assertEqual(result["code"], "timeout")
+        connection.poll.assert_not_called()
+        process.terminate.assert_called_once()
+
     def test_official_data_and_schemas_match_preimplementation_hashes(self):
         import hashlib
         baseline = ROOT / "bench/results/vision-official-before.json"
@@ -88,7 +107,12 @@ print("core imports without vision")
             self.skipTest("Preimplementation integrity report not supplied")
         for row in json.loads(baseline.read_text(encoding="utf-8-sig")):
             with self.subTest(path=row["path"]):
-                self.assertEqual(hashlib.sha256((ROOT / row["path"].replace("\\", "/")).read_bytes()).hexdigest().upper(), row["sha256"])
+                raw = (ROOT / row["path"].replace("\\", "/")).read_bytes()
+                # The archived report predates this checkout. Git's permitted
+                # CRLF conversion is not a data edit; same-host byte integrity
+                # is checked separately in vision-audit-official-before/after.
+                normalized = raw.replace(b"\r\n", b"\n")
+                self.assertEqual(hashlib.sha256(normalized).hexdigest().upper(), row["sha256"])
 
 
 class RemovedVisionCliTest(unittest.TestCase):

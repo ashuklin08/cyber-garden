@@ -1,22 +1,22 @@
 {
   "model": "nomic-ai/nomic-embed-vision-v1.5",
   "revision": "e3a725bce72db07ca4adb1d83da08903f3ee02f8",
-  "fingerprint": "2838f16661ab26290e2bd89ee569461256f4411575e00cb19ca1c5df029da583",
+  "fingerprint": "d787ff63d630fe05133e91cf3c33f6e5bd593149f150eee2221666d7ce33e7be",
   "method": "midpoint_between_min_positive_and_max_negative_cosine_on_frozen_calibration_pairs",
-  "evaluation_sha256": "f804425def5b1dfbef7bf80c9eafeb0ca90777c1de7e4a08ebae1e249edb15f3",
+  "evaluation_sha256": "8a5172f6a52d26b3f80f74c38a1f9cc5b6b8744d90d52ed87c51c6ec4d102692",
   "threshold": 0.8367531895637512,
   "min_positive": 0.9370191097259521,
   "max_negative": 0.7364872694015503,
   "positive_pairs": 2,
   "negative_pairs": 7,
   "limitations": "Small synthetic demo only; no claim of production accuracy or calibrated probabilities.",
-  "model_load_ms": 560.9654989093542,
+  "model_load_ms": 437.2967015951872,
   "query_embedding_ms": [
-    212.35599927604198,
-    143.81450042128563,
-    157.29410015046597,
-    142.18479953706264,
-    165.38479924201965
+    177.47770063579082,
+    162.05419972538948,
+    167.16310009360313,
+    150.5282986909151,
+    167.00030118227005
   ],
   "observations": [
     {

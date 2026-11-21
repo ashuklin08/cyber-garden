@@ -6,14 +6,18 @@ from buyer.vision.config import WEIGHT_SHA256
 from buyer.vision.embeddings import normalize, preprocess
 
 
+def verify_weights(path):
+    if not path.is_file():
+        raise FileNotFoundError("missing_model")
+    with path.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != WEIGHT_SHA256:
+            raise ValueError("model_integrity")
+
+
 class VisionModel:
     def __init__(self, path):
         started = time.perf_counter()
-        if not path.is_file():
-            raise FileNotFoundError("missing_model")
-        with path.open("rb") as stream:
-            if hashlib.file_digest(stream, "sha256").hexdigest() != WEIGHT_SHA256:
-                raise ValueError("model_integrity")
+        verify_weights(path)
         import onnxruntime as ort
         options = ort.SessionOptions()
         options.intra_op_num_threads = 2

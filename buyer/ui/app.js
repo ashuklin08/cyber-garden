@@ -416,17 +416,86 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
   const input = byId("visual-file"), preview = byId("visual-preview");
   const search = byId("visual-search"), remove = byId("visual-remove");
   const status = byId("visual-status"), cards = byId("visual-results");
-  let file = null, objectURL = null, pending = false, controller = null, generation = 0;
-  function controls() { search.disabled = !file || pending; remove.disabled = !file; input.disabled = pending; }
+  const readiness = byId("visual-readiness"), examples = byId("visual-examples");
+  const setup = byId("visual-setup"), setupHint = byId("visual-setup-hint");
+  const recheck = byId("visual-recheck");
+  let file = null, objectURL = null, pending = false, selecting = false, controller = null, generation = 0;
+  let exampleController = null, healthGeneration = 0, healthPending = false, exampleButtons = [];
+  function controls() {
+    search.disabled = !file || pending || selecting || healthPending; remove.disabled = !file && !selecting; input.disabled = pending;
+    recheck.disabled = pending || selecting || healthPending;
+    for (const button of exampleButtons) button.disabled = pending || selecting || healthPending;
+    search.textContent = pending ? "Ищу похожие товары…" : "Найти похожие товары";
+  }
   function clear() {
     generation++;
     controller?.abort(); controller = null; pending = false; file = null;
+    exampleController?.abort(); exampleController = null; selecting = false;
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = null; preview.removeAttribute("src"); preview.hidden = true; input.value = "";
     preview.onload = preview.onerror = null;
     cards.replaceChildren(); controls();
     status.textContent = "Фото удалено. Можно продолжить обычный поиск или выбрать другое изображение.";
   }
+  async function chooseExample(url) {
+    if (pending || selecting) return;
+    clear(); selecting = true; controls();
+    const selectedGeneration = generation;
+    exampleController = new AbortController();
+    const selectedController = exampleController;
+    const timeout = setTimeout(() => selectedController.abort(), 15000);
+    status.textContent = "Загружаю демо-пример…";
+    try {
+      const response = await fetch(url, {signal: exampleController.signal});
+      if (!response.ok) throw new Error("Example unavailable");
+      const blob = await response.blob();
+      if (generation !== selectedGeneration) return;
+      choose([blob]);
+      status.textContent = "Демо-пример выбран. Нажмите «Найти похожие товары».";
+    } catch {
+      if (generation === selectedGeneration) status.textContent = "Не удалось загрузить пример. Выберите фото с компьютера.";
+    } finally {
+      clearTimeout(timeout);
+      if (generation === selectedGeneration) { selecting = false; exampleController = null; controls(); }
+    }
+  }
+  async function refreshReadiness() {
+    if (healthPending || pending || selecting) return;
+    healthPending = true; controls();
+    const check = ++healthGeneration;
+    readiness.textContent = "Проверяю готовность визуального поиска…";
+    readiness.setAttribute("data-state", "checking");
+    const health = new AbortController();
+    const timeout = setTimeout(() => health.abort(), 10000);
+    try {
+      const response = await fetch("/api/visual-status", {signal: health.signal});
+      const data = await response.json();
+      if (check !== healthGeneration) return;
+      if (!response.ok) throw new Error("Readiness unavailable");
+      readiness.textContent = data.message + (data.coverage ? " Покрытие: " + data.coverage.indexed + " из " + data.coverage.total + " объявлений." : "");
+      readiness.setAttribute("data-state", data.status === "ready" ? "ready" : "unavailable");
+      setup.hidden = data.status === "ready";
+      setupHint.textContent = data.setup_hint || "Проверьте установку и подготовку визуального модуля.";
+      examples.replaceChildren(); exampleButtons = [];
+      for (const sample of data.examples || []) {
+        if (!/^\/visual-demo\/(table|chair|lamp|landscape)$/.test(sample.url)) continue;
+        const button = element("button", "visual-example"); button.type = "button";
+        const image = element("img"); image.src = sample.url; image.alt = "Синтетический демо-пример: " + sample.label;
+        image.loading = "lazy";
+        button.append(image, element("span", null, sample.label));
+        button.addEventListener("click", () => chooseExample(sample.url));
+        exampleButtons.push(button); examples.append(button);
+      }
+      controls();
+    } catch {
+      if (check === healthGeneration) {
+        readiness.textContent = "Готовность фото-поиска не подтверждена. Обычный поиск доступен.";
+        readiness.setAttribute("data-state", "unavailable");
+        setup.hidden = false; setupHint.textContent = "Проверьте запуск сервера и подготовку модуля по README.";
+      }
+    } finally { clearTimeout(timeout); healthPending = false; controls(); }
+  }
+  recheck.addEventListener("click", refreshReadiness);
   function choose(files) {
     clear();
     if (!files || files.length !== 1 || !files[0].size || files[0].size > 5 * 1024 * 1024) {
@@ -455,7 +524,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
   toggle.addEventListener("click", () => {
     const opening = panel.hidden;
     panel.hidden = !opening; toggle.setAttribute("aria-expanded", String(opening));
-    if (opening) voiceInput.stop();
+    if (opening) { voiceInput.stop(); refreshReadiness(); }
   });
   input.addEventListener("change", () => choose(input.files));
   const drop = byId("visual-drop");
@@ -467,14 +536,18 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
     const requestGeneration = generation;
     pending = true; controls(); cards.replaceChildren();
     status.textContent = "Ищу похожие товары…";
+    let requestTimeout;
     try {
       controller = new AbortController();
+      const requestController = controller;
+      requestTimeout = setTimeout(() => requestController.abort(), 40000);
       const body = new FormData(); body.append("image", file);
       const response = await fetch("/api/visual-search", {method: "POST", body, signal: controller.signal});
       const result = await response.json();
       if (generation !== requestGeneration) return;
       if (!response.ok || result.status !== "ok") {
         status.textContent = result.message || "Визуальный поиск недоступен. Вы можете воспользоваться обычным поиском.";
+        if (result.status === "visual_unavailable") { setup.hidden = false; setupHint.textContent = result.setup_hint || "Повторите подготовку модуля по README."; }
         return;
       }
       status.textContent = result.message + " Покрытие каталога: " + result.coverage.indexed + " из " + result.coverage.total + " объявлений.";
@@ -484,6 +557,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
         // Only the demo's allowlisted relative product images can be displayed.
         if (typeof item.image_path === "string" && /^products\/[a-zA-Z0-9_-]+\.(png|jpe?g|webp)$/.test(item.image_path)) {
           image.src = "/visual-images/" + item.image_path; image.alt = "Демонстрационное изображение: " + item.title;
+          image.loading = "lazy";
           card.append(image);
         }
         card.append(element("h3", null, item.rank + ". " + item.title),
@@ -494,6 +568,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
     } catch {
       if (generation === requestGeneration) status.textContent = "Визуальный поиск временно недоступен. Вы можете воспользоваться обычным поиском.";
     } finally {
+      clearTimeout(requestTimeout);
       if (generation === requestGeneration) { pending = false; controller = null; controls(); }
     }
   });
