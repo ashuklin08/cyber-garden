@@ -18,7 +18,8 @@ UNSUPPORTED = re.compile(
 )
 REMOVE = re.compile(r"\b(?:без|убери|исключи|удали|вычеркни|отмени)\s*$", re.I)
 AFTER_REMOVE = re.compile(r"^\s*(?:(?:(?:мне|нам|теперь|уже|больше)\s+)*не\s+нуж|уже\s+есть\b)")
-ADD = re.compile(r"\b(?:добавь|добавить|плюс|ещё|еще|также)\b", re.I)
+ADDITIONS = r"а\s+также|также|дополнительно|вместе\s+с|плюс|еще|добавь|добавить"
+ADD = re.compile(r"\b(?:" + ADDITIONS + r")\b", re.I)
 ONLY = re.compile(r"\b(?:только|лишь)\s+(?:(?:компьютерн\w*|письменн\w*|"
                   r"удобн\w*|офисн\w*|настольн\w*)\s+)?$", re.I)
 AMBIGUOUS = re.compile(r"\b(?:или|либо|может|возможно|если|вместо|лучше|предпочтительнее)\b", re.I)
@@ -32,10 +33,10 @@ class CategoryAnchor:
     pending_unknown: tuple[str, ...] = ()
 
 
-ITEM_CUE = re.compile(r"\b(?:и|плюс|добавь|добавить|без|убери|исключи|удали|"
+ITEM_CUE = re.compile(r"\b(?:" + ADDITIONS + r"|и|без|убери|исключи|удали|"
                       r"нуж\w*|хочу|ищу|только)\s+"
                       r"(?:(?:\w+(?:ый|ий|ой|ая|яя|ое|ые|ую|ого|ому|ыми|ых)|очень|еще|мне)\s+){0,3}$")
-NON_ITEMS = re.compile(r"^(?:в|на|до|от|не|еще|также|все|тот|те|же|теперь|лучше|"
+NON_ITEMS = re.compile(r"^(?:а|но|вместе|в|на|до|от|не|еще|также|все|тот|те|же|теперь|лучше|"
                        r"желательн\w*|предпочтительн\w*|обязательн\w*|очень|нуж\w*|"
                        r"хочу|ищу|добавь|добавить|убери|без|только|вместо|подбери|найди|"
                        r"бюджет\w*|ширин\w*|температур\w*|свет\w*|город\w*|самовывоз\w*|"
@@ -56,7 +57,8 @@ def _unknown_items(text):
         if not (initial_removal or re.search(r"[,;]\s*$", before) or ITEM_CUE.search(before)):
             continue
         word = hit[0]
-        if (NON_ITEMS.fullmatch(word) or any(pattern.fullmatch(word) for pattern in WORDS.values())
+        if (NON_ITEMS.fullmatch(word) or ADD.fullmatch(word)
+                or any(pattern.fullmatch(word) for pattern in WORDS.values())
                 or re.match(r"\s+(?:тыс\w*|руб\w*)\b", text[hit.end():])
                 or re.search(r"(?:ый|ий|ой|ая|яя|ое|ее|ые|ие|ую|ого|ому|ыми|ых)$", word)):
             continue
@@ -66,6 +68,12 @@ def _unknown_items(text):
 
 def _item_key(word):
     return re.sub(r"(?:ами|ах|ом|ов|а|у|е|ы)$", "", word)
+
+
+def accessory_context(prefix):
+    """Plain 'с' describes an item; 'вместе с' explicitly adds another item."""
+    return bool(re.search(r"\b(?:для|под|к|от|на|с|со)\s*$", prefix)
+                and not re.search(r"\bвместе\s+с\s*$", prefix))
 
 
 def categories_from_dialog(messages, initial=()):
@@ -86,7 +94,7 @@ def categories_from_dialog(messages, initial=()):
         for match in _unknown_items(text):
             before = text[max(0, match.start() - 32):match.start()]
             after = text[match.end():match.end() + 32]
-            if re.search(r"\b(?:для|под|к|от|на|с|со)\s*$", before):
+            if accessory_context(before):
                 continue
             removed = (REMOVE.search(before) or re.search(r"\bне\s+нуж\w*\s*$", before)
                        or AFTER_REMOVE.search(after))

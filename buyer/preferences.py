@@ -2,7 +2,7 @@
 
 import re
 
-from buyer.anchors import WORDS, categories_from_dialog
+from buyer.anchors import ADDITIONS, WORDS, categories_from_dialog
 from buyer.query_parser import Preference, QUALITIES, SPLIT, normalize, typed_preference
 from buyer.ranking import tokens
 
@@ -47,16 +47,19 @@ def rejected(pref, text):
 
 
 def category_text(text):
-    # Rejecting a qualified item cancels the quality, not the ordinary item.
-    clauses = []
-    for clause in SPLIT.split(normalize(text)):
+    # Mask only the rejected item segment. Preserve separators and composition
+    # connectors verbatim: SPLIT would consume 'а' in 'а также' and lose intent.
+    parts = re.split(r"([,;.!?\n]+|\b(?:" + ADDITIONS + r"|и)\b)", normalize(text))
+    for index in range(0, len(parts), 2):
+        clause = parts[index]
         qualified_rejection = any(
             WORDS[category].search(clause) and any(
                 rejected(Preference(category, hit[0]), clause)
                 for hit in re.finditer(pattern, clause))
             for category, pattern in QUALITIES.items())
-        clauses.append("" if qualified_rejection else clause)
-    return ". ".join(clauses)
+        if qualified_rejection:
+            parts[index] = " " * len(clause)
+    return "".join(parts)
 
 
 def evolve(previous, incoming, text):

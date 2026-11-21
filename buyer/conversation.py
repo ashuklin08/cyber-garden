@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass, replace
 
-from buyer.anchors import WORDS, categories_from_dialog
+from buyer.anchors import WORDS, accessory_context, categories_from_dialog
 from buyer.contracts import Requirements, read_requirements
 from buyer.query_parser import ATTRIBUTES, CITIES_RE, CORE, OWNER, Preference, normalize, parse_turn, tighten
 from buyer.preferences import category_text, evolve, grounded
@@ -27,7 +27,6 @@ ATTRIBUTE_QUESTIONS = {
 CATEGORY_ALTERNATIVE = re.compile(r"\b(?:или|либо)\b")
 CITY_NAMES = "(?:" + "|".join(pattern.pattern for pattern in CITIES_RE.values()) + ")"
 CITY_ALTERNATIVE = re.compile(rf"{CITY_NAMES}\s+(?:или|либо)\s+(?:в\s+)?{CITY_NAMES}")
-CONTEXT_CATEGORY = re.compile(r"\b(?:для|под|от|на|к|с|со)\s*$")
 SAFE_WORDS = re.compile(
     r"(?:(?:мне|нам|я|ты|бы|в|во|на|из|для|под|с|со|и|а|но|за|по|к|у|не|да|"
     r"до|от|см|мм|м|р|руб|тыс|лишь|только|еще|уже|ровно|точно|строго|чуть|"
@@ -82,7 +81,7 @@ def _category_update(text, categories, prompted):
         if any(pattern.search(left) for pattern in WORDS.values()) and any(
                 pattern.search(right) for pattern in WORDS.values()):
             return True, None
-    if any(CONTEXT_CATEGORY.search(text[:match.start()]) for pattern in WORDS.values()
+    if any(accessory_context(text[:match.start()]) for pattern in WORDS.values()
            for match in pattern.finditer(text)):
         return False, None
     if prompted:

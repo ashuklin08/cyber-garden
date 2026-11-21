@@ -1,15 +1,16 @@
 """OpenSearch retrieval over one search snapshot. Only the seller title is searchable."""
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_CEILING, ROUND_FLOOR
 from itertools import product
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from buyer.contracts import CATEGORIES, FEATURES, read_catalog
+from buyer.contracts import CATEGORIES, FEATURES, Comparison, read_catalog
 from buyer.selection import Selection, _explain, matches, select
-from buyer.ranking import ALIASES
+from buyer.ranking import ALIASES, _soft_condition, listing_scores
+from buyer.query_parser import typed_preference
 
 
 class SearchError(RuntimeError):
@@ -95,6 +96,9 @@ class SearchProvider:
             return Retrieved(select((), req), (), {}, 0)
         buckets = {}
         wishes = {}
+        preferences = tuple(typed_preference(pref) for pref in preferences)
+        numeric = tuple(pref for pref in preferences if pref.attribute and _soft_condition(pref) is not None)
+        soft_requirements = {}
         for category in req.categories:
             scope = limits(req, category)
             aggs = {"cheap": {"top_hits": {"size": 3, "sort": ORDER}}}
@@ -106,6 +110,21 @@ class SearchProvider:
                     aggs["cheap"]["top_hits"]["size"] = 16
                 aggs["relevant"] = {"filter": {"match": {"title": terms(words, expand)}},
                                     "aggs": {"hits": {"top_hits": {"size": 8, "sort": ["_score", *ORDER]}}}}
+            soft_requirements[category] = {}
+            for position, pref in enumerate(numeric):
+                if pref.category != category:
+                    continue
+                condition = _soft_condition(pref)
+                value = (condition[0][1] if category == "chair" else
+                         tuple(Comparison(op, bound) for op, bound in condition))
+                soft_requirements[category][f"p{position}"] = replace(req, **{pref.attribute: value})
+            if soft_requirements[category]:
+                # These buckets add matching candidates inside the hard scope;
+                # they do not narrow the main query or remove cheap alternatives.
+                aggs["numeric"] = {"filters": {"filters": {
+                    key: {"bool": {"filter": limits(soft, category)}}
+                    for key, soft in soft_requirements[category].items()}},
+                    "aggs": {"hits": {"top_hits": {"size": 8, "sort": ORDER}}}}
             buckets[category] = {"filter": {"bool": {"filter": scope}}, "aggs": aggs}
         # Score the same positive terms in query context (filter aggregations do not score).
         should = [{"bool": {"filter": {"term": {"category": key}},
@@ -131,12 +150,28 @@ class SearchProvider:
                     or (counts[category] == 0 and (hits or ranked))):
                 raise SearchError("Несогласованное число результатов индекса")
             by_id = {}
-            for hit in hits + ranked:
+            candidates = [(hit, None) for hit in hits + ranked]
+            if soft_requirements[category]:
+                soft_buckets = group["numeric"]["buckets"]
+                if set(soft_buckets) != set(soft_requirements[category]):
+                    raise SearchError("Индекс не вернул все числовые пожелания")
+                for key, soft in soft_requirements[category].items():
+                    bucket = soft_buckets[key]
+                    soft_hits = bucket["hits"]["hits"]["hits"]
+                    count = bucket["doc_count"]
+                    if (type(count) is not int or not 0 <= count <= counts[category]
+                            or not isinstance(soft_hits, list) or bool(count) != bool(soft_hits)
+                            or len(soft_hits) > count):
+                        raise SearchError("Неполная выборка по числовому пожеланию")
+                    candidates.extend((hit, soft.condition(category)) for hit in soft_hits)
+            for hit, soft_condition in candidates:
                 row = hit["_source"]
                 item, = read_catalog([row])
                 if (hit["_id"] != item.id or item.city_id != req.city_id or item.category != category
                         or not matches(item, req.condition(category))):
                     raise SearchError("Индекс вернул несогласованные данные")
+                if soft_condition is not None and not matches(item, soft_condition):
+                    raise SearchError("Индекс вернул неподтверждённое числовое совпадение")
                 if item.id in by_id and by_id[item.id] != item:
                     raise SearchError("Индекс вернул противоречивые данные одного ID")
                 by_id[item.id] = item
@@ -150,6 +185,17 @@ class SearchProvider:
             for rank, ident in enumerate(order):
                 scores[ident] = 8 - rank
             groups[category] = tuple(by_id.values())
+        if numeric:
+            numeric_scores = listing_scores(groups, numeric)
+            numeric_categories = {pref.category for pref in numeric}
+            for category, items in groups.items():
+                has_numeric = category in numeric_categories
+                has_text = category in wishes
+                for item in items:
+                    # Equal category scales; retain the existing indexed text
+                    # order and combine it with the backend's structured score.
+                    lexical = 1250 * max(0, scores.get(item.id, 0))
+                    scores[item.id] = (lexical + numeric_scores[item.id]) // max(1, has_numeric + has_text)
         listings = tuple(item for group in groups.values() for item in group)
         baseline = select(listings, req)
         response = baseline.response
