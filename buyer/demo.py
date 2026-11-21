@@ -206,7 +206,20 @@ def main():
             parser.error("--semantic-model требует --index")
         from buyer.semantic import SemanticRanker
         provider.semantic = SemanticRanker(args.semantic_model)
-    with DemoServer(args.port, args.catalog, provider) as server:
+
+    # A previous demo process is often still running during a presentation.
+    # Pick the next port instead of failing with an opaque bind error.
+    server = None
+    for port in range(args.port, args.port + 10):
+        try:
+            server = DemoServer(port, args.catalog, provider)
+            break
+        except OSError as error:
+            if getattr(error, "errno", None) != 48 and getattr(error, "winerror", None) != 10048:
+                raise
+    if server is None:
+        parser.error(f"Порты {args.port}–{args.port + 9} заняты. Остановите старое демо или задайте --port.")
+    with server:
         print(f"http://127.0.0.1:{server.server_port}", flush=True)
         try:
             server.serve_forever()
