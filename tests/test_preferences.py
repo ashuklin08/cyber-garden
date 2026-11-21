@@ -129,6 +129,17 @@ class RankingTest(unittest.TestCase):
 
 
 class PreferenceHistoryTest(unittest.TestCase):
+    def test_live_corrected_model_spelling_keeps_literal_local_wish(self):
+        messages = dialog("Нужен кампьютерный стол в Таганроге, бюджет 15000 рублей.")
+        model_wishes = _preferences([{"category": "table", "text": "компьютерный"}], messages)
+        self.assertFalse(model_wishes)  # Corrected spelling is not a literal buyer quote.
+        query = self.resolve(messages, model_wishes)
+        self.assertEqual(query.preferences, (Preference("table", "кампьютерный"),))
+        rows = read_catalog([item("cheap", "table", 100, "Стол"),
+                             item("computer", "table", 200, "Компьютерный стол")])
+        response = select(rows, query.requirements, query.preferences).response
+        self.assertEqual(response["options"][0]["listing_ids"], ["computer"])
+
     def resolve(self, messages, wishes=()):
         # Deliberately stale model requirements must not override confirmed facts.
         gemma = Mock(return_value=(ModelQuery(requirements(city_id="azov", budget_rub=1), wishes), None))

@@ -68,6 +68,24 @@ class ConversationTest(unittest.TestCase):
     def setUp(self):
         self.manager = ConversationManager()
 
+    def test_live_city_and_maximum_budget_edit_preserves_composition(self):
+        messages = dialog("Стол до 100 см и кресло, Таганрог, до 5 тыс.",
+                          "Подобрал вариант за 4200 ₽.", "Лучше в Азове и максимум 3200.")
+        gold = expected(city_id="azov", budget_rub=3200, categories=["table", "chair"], width_cm=[["lte", 100]])
+        gemma = Mock(return_value=(ModelQuery(gold, ()), object()))
+        state, _ = self.manager.resolve(messages, gemma, require_model=True)
+        self.assertEqual(state.requirements, gold)
+        self.assertFalse(state.blocked_categories)
+
+    def test_live_comparison_after_and_is_not_an_extra_item(self):
+        messages = dialog("Стол не шире 100 см и шире 120 см. Таганрог. Бюджет 15000 рублей.")
+        gold = expected(city_id="taganrog", budget_rub=15000, categories=["table"],
+                        width_cm=[["gt", 120], ["lte", 100]])
+        gemma = Mock(return_value=(ModelQuery(gold, ()), object()))
+        query, _ = self.manager.resolve(messages, gemma, require_model=True)
+        self.assertEqual(query.requirements, gold)
+        self.assertFalse(query.blocked_categories)
+
     def test_local_corpus(self):
         for label, messages, gold in CASES:
             with self.subTest(label=label):
