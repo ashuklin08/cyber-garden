@@ -108,7 +108,7 @@ class LocalState:
             names = [UNSUPPORTED_NAMES[item] for item in self.unsupported_items if item in UNSUPPORTED_NAMES]
             text = ("К сожалению, в текущем каталоге нет " + ("категории" if len(names) == 1 else "категорий") + " «" + "», «".join(names)
                     + "». Сейчас доступны столы, кресла и лампы. Может быть, вас интересует что-то из них?"
-                    if names else "Сейчас подбор поддерживает столы, кресла и лампы. Уточните, какие товары вам нужны.")
+                    if names else "Запрошенной категории нет в текущем каталоге. Доступны столы, кресла и лампы. Что из них вам показать?")
             questions = clarification_questions(self.requirements)
             return tuple(dict(question, text=text) if question["field"] == "categories" else question
                          for question in questions)

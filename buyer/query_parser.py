@@ -44,7 +44,7 @@ WIDTH = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?P<u>{WIDTH_UNIT})(?!\w)|\b(
 TEMPERATURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?P<u>{TEMP_UNIT})(?!\w)")
 SPACED_TEMPERATURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s+(?P<u>{TEMP_UNIT})(?!\w)")
 RANGE_START = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?:до|[-–—])\s*$")
-MONEY_UNIT = r"тыс(?:яч\w*)?\.?|[кk]|₽|руб(?:л\w*)?\.?"
+MONEY_UNIT = r"миллион\w*|млн\.?|тыс(?:яч\w*)?\.?|[кk]|₽|руб(?:л\w*)?\.?"
 MONEY = re.compile(rf"(?<![\w-])(?P<n>{NUMBER})(?:\s*(?P<u>{MONEY_UNIT})(?!\w))?")
 BARE_MEASURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})(?P<u>)")
 PLAIN_MEASURE = re.compile(rf"(?:(?:{'|'.join(pattern for _, pattern in OPERATIONS)})\s+|"
@@ -58,7 +58,7 @@ SPELLED = {
     "восемь": "8", "девять": "9", "десять": "10", "пятнадцать": "15",
     "двадцать": "20", "тридцать": "30", "пятьдесят": "50", "сто": "100",
 }
-WORD_MONEY = re.compile(r"\b(" + "|".join(SPELLED) + r")(\s+(?:тыс(?:яч\w*)?|руб\w*))\b")
+WORD_MONEY = re.compile(r"\b(" + "|".join(SPELLED) + r")(\s+(?:миллион\w*|млн|тыс(?:яч\w*)?|руб\w*))\b")
 BUDGET_WORD = re.compile(r"\b(?:бюджет\w*|на\s+все|за\s+все|общая\s+сумма|"
                          r"уложиться|максимум|лимит\w*|ценов\w*\s+потолок)\b")
 PRICE_PER_ITEM = re.compile(r"\b(?:за\s+(?:стол\w*|кресл\w*|ламп\w*|стул\w*|светильник\w*)|"
@@ -139,8 +139,11 @@ def _value(match, kind):
             return value * 100
         if unit == "мм" or unit.startswith("миллиметр"):
             return value / 10
-    if kind == "budget_rub" and (unit in {"к", "k"} or unit.startswith("тыс")):
-        return value * 1000
+    if kind == "budget_rub":
+        if unit.startswith(("миллион", "млн")):
+            return value * 1_000_000
+        if unit in {"к", "k"} or unit.startswith("тыс"):
+            return value * 1000
     return value
 
 
@@ -191,7 +194,8 @@ def _budget(text, numeric_spans, prompted, first):
     explicit = bool(BUDGET_WORD.search(text))
     matches = list(MONEY.finditer(text))
     spelled = [(word.start(), word.end(), _decimal(SPELLED[word[1]]) *
-                (1000 if word[2].strip().startswith("тыс") else 1), True)
+                (1_000_000 if word[2].strip().startswith(("миллион", "млн")) else
+                 1000 if word[2].strip().startswith("тыс") else 1), True)
                for word in WORD_MONEY.finditer(text)]
     candidates = spelled + [
         (match.start(), match.end(), _value(match, "budget_rub"), bool(match["u"]))

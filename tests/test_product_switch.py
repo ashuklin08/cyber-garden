@@ -17,6 +17,19 @@ def history():
 
 
 class ProductSwitchTest(unittest.TestCase):
+    def test_unknown_category_is_explicitly_unavailable(self):
+        state = ConversationManager().local([
+            {"role": "user", "text": "Хочу велосипед в Таганроге до 10000 рублей"}])
+        self.assertTrue(state.blocked_categories)
+        self.assertIn("категории нет", state.decision_questions()[0]["text"])
+
+    def test_million_ruble_budget(self):
+        for amount in ("2 миллиона рублей", "два миллиона рублей", "2 млн"):
+            with self.subTest(amount=amount):
+                state = ConversationManager().local([
+                    {"role": "user", "text": f"Стол в Таганроге, бюджет {amount}"}])
+                self.assertEqual(state.requirements.budget_rub, 2_000_000)
+
     def test_new_product_replaces_bundle_and_old_width(self):
         manager = ConversationManager()
         state = manager.local(history())
