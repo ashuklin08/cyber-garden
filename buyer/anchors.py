@@ -22,6 +22,7 @@ ADDITIONS = r"а\s+также|также|дополнительно|вместе
 ADD = re.compile(r"\b(?:" + ADDITIONS + r")\b", re.I)
 ONLY = re.compile(r"\b(?:только|лишь)\s+(?:(?:компьютерн\w*|письменн\w*|"
                   r"удобн\w*|офисн\w*|настольн\w*)\s+)?$", re.I)
+SWITCH = re.compile(r"\b(?:а\s+)?что\s+(?:насчет|насчёт|по\s+поводу)\s*$", re.I)
 AMBIGUOUS = re.compile(r"\b(?:или|либо|может|возможно|если|вместо|лучше|предпочтительнее)\b", re.I)
 
 
@@ -89,7 +90,8 @@ def categories_from_dialog(messages, initial=()):
             (match.start(), match.end(), key)
             for key, pattern in WORDS.items() for match in pattern.finditer(text)
         )
-        only_category = any(ONLY.search(text[:start]) for start, _, _ in mentions)
+        only_category = any(ONLY.search(text[:start]) or SWITCH.search(text[:start])
+                            for start, _, _ in mentions)
         if only_category:
             unsupported_requested.clear()
         for match in _unknown_items(text):

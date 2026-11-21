@@ -47,6 +47,7 @@ SAFE_WORDS = re.compile(
 
 RESET_DIALOG = re.compile(r"^(?:(?:начни|начать|начнем)\s+)?новый\s+диалог[.!?\s]*$")
 OFF_TOPIC = re.compile(r"\b(?:рецепт\w*|приготов\w*|погод\w*|анекдот\w*|гороскоп\w*|теорем\w*|пифагор\w*|переведи|напиши\s+код)\b")
+REJECT_BUNDLE = re.compile(r"\b(?:нахера|зачем|нафига|почему)\s+(?:мне\s+)?комплект\b|\bне\s+нужен\s+комплект\b")
 SHOPPING_CONTEXT = re.compile(
     r"\b(?:нуж\w*|хочу|ищу|подбери|подобрать|найди|куп\w*|добавь|убери|оставь|"
     r"бюджет\w*|город\w*|ширин\w*|регулиров\w*|температур\w*|пожелан\w*|"
@@ -93,6 +94,9 @@ class LocalState:
     unsupported_items: tuple[str, ...] = ()
 
     def decision_questions(self):
+        if self.turn_issue == "bundle_rejected":
+            return ({"field": "categories", "text":
+                     "Понял, вам нужен один товар. Что именно показать — стол, кресло или лампу?"},)
         if self.turn_issue == "off_topic":
             return ({"field": "categories", "text": OFF_TOPIC_QUESTION},)
         if self.turn_issue == "ambiguous":
@@ -195,6 +199,11 @@ class ConversationManager:
                 continue
 
             turn_issue = None
+            if REJECT_BUNDLE.search(text):
+                turn_issue = "bundle_rejected"
+                needs_model = True
+                pending = set()
+                continue
             if RESET_DIALOG.fullmatch(text):
                 confirmed.update(EMPTY)
                 needs_model = True
@@ -216,9 +225,19 @@ class ConversationManager:
                 turn.uncertain.discard("budget_rub")
                 needs_model = True
             composition = category_text(text)
+            switching_product = bool(re.search(
+                r"\b(?:а\s+)?что\s+(?:насчет|насчёт|по\s+поводу)\s+", composition))
             composition_history.append({"role": "user", "text": composition})
             anchor = categories_from_dialog(composition_history)
             recognized, categories = _category_update(composition, current.categories, "categories" in pending)
+            if switching_product:
+                replacement = categories_from_dialog([{"role": "user", "text": composition}])
+                if replacement.categories:
+                    recognized, categories = True, list(replacement.categories)
+                    for field in ATTRIBUTES:
+                        if field not in turn.values:
+                            turn.values[field] = EMPTY[field]
+                    preferences = ()
             mentions = any(pattern.search(composition) for pattern in WORDS.values())
             was_blocked = blocked_categories
             blocked_categories = bool(anchor.pending_unknown)
