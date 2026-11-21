@@ -3,6 +3,7 @@
 Never reads request headers. Activated only by the live harness, not by ./run.
 """
 from datetime import datetime, timezone
+from dataclasses import asdict
 import json
 from pathlib import Path
 import threading
@@ -11,6 +12,7 @@ import urllib.error
 import urllib.request
 
 from buyer import model
+from buyer.conversation import ConversationManager
 from buyer.contracts import ROOT
 
 OFFICIAL = "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1"
@@ -69,6 +71,18 @@ def install(path):
 
     urllib.request.OpenerDirector.open = observed_open
     model._gateway = observed_gateway
+
+    real_resolve = ConversationManager.resolve
+
+    def observed_resolve(manager, *args, **kwargs):
+        state, trace = real_resolve(manager, *args, **kwargs)
+        record({"kind": "resolved_state", "requirements": asdict(state.requirements),
+                "preferences": [asdict(item) for item in state.preferences],
+                "unresolved": sorted(state.unresolved),
+                "ambiguous_attributes": sorted(state.ambiguous_attributes)})
+        return state, trace
+
+    ConversationManager.resolve = observed_resolve
 
 
 def events(path):

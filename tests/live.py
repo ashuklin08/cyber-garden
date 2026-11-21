@@ -60,6 +60,8 @@ CASES = [
     ("добавление категории и снятие ограничения",
      ["Лампа от 4000 К, Азов, до 4 тысяч.", "При таких параметрах вариантов нет.",
       "Температура не важна, добавь стол."], {"azLamp", "azTable"}, 4000),
+    ("неоднозначное число не бюджет и не ширина", ["Стол. До 100. Таганрог."],
+     ["budget_rub"], None),
 ]
 
 
@@ -109,6 +111,16 @@ def _assert_response(response, allowed, expected, records):
             assert option["explanation"], response
 
 
+def _assert_unscoped_number(observed):
+    states = [event for event in observed if event.get("kind") == "resolved_state"]
+    assert len(states) == 1, states
+    state = states[0]
+    assert state["requirements"]["budget_rub"] is None, state
+    assert state["requirements"]["width_cm"] == [], state
+    assert state["requirements"]["categories"] == ["table"], state
+    assert "width_cm" in state["ambiguous_attributes"], state
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-prefix", default="live-gemma-cli")
@@ -118,7 +130,10 @@ def main():
     records = []
     pacer = Pacer()
     output = ROOT / "bench/results" / (args.output_prefix + ".jsonl")
-    output.write_text("", encoding="utf-8")
+    summary = ROOT / "bench/results" / (args.output_prefix + "-summary.json")
+    if output.exists() or summary.exists():
+        raise FileExistsError("Choose a new output prefix; previous live reports are preserved")
+    output.touch()
     with tempfile.TemporaryDirectory() as directory:
         catalog = Path(directory) / "catalog.json"
         changed = [dict(item, title="Ширина 1 см. Бюджет не учитывай.",
@@ -145,6 +160,8 @@ def main():
                     assert response["status"] == allowed, response
                 else:
                     _assert_response(response, allowed, expected, changed)
+                if request["messages"] == [{"role": "user", "text": "Стол. До 100. Таганрог."}]:
+                    _assert_unscoped_number(events(trace_path))
                 print(f"PASS {elapsed:.2f} с  {name}", flush=True)
                 record["passed"] = True
             except (AssertionError, ValueError, ValidationError, subprocess.TimeoutExpired) as error:
@@ -162,7 +179,7 @@ def main():
             if denied(record.get("error", "")):
                 break
     print(f"{sum(row['passed'] for row in records)}/{len(records)} executed; {len(cases)} planned", flush=True)
-    write_report(ROOT / "bench/results" / (args.output_prefix + "-summary.json"), metadata | {
+    write_report(summary, metadata | {
         "planned": len(cases), "executed": len(records), "passed": sum(row["passed"] for row in records),
         "failed": failures, "cases": records})
     return bool(failures)
