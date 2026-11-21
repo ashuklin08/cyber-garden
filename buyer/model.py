@@ -13,9 +13,9 @@ from http.client import HTTPException
 from urllib.parse import urlsplit
 
 from buyer.anchors import categories_from_dialog
-from buyer.contracts import CATEGORIES, ROOT, Requirements, decode_json, read_requirements
+from buyer.contracts import CATEGORIES, CITIES, ROOT, Requirements, decode_json, read_requirements
 from buyer.prompt import SYSTEM
-from buyer.query_parser import Preference
+from buyer.query_parser import Preference, PROPER_LOCATION
 from buyer.preferences import grounded
 from llm.client import NoRedirect
 
@@ -44,6 +44,7 @@ class ModelQuery:
     preferences: tuple[Preference, ...]
     intent: str | None = None
     requested_categories: tuple[str, ...] | None = None
+    requested_location: dict | None = None
 
 
 def configuration():
@@ -211,6 +212,29 @@ def extract(messages, *, full_history=False, use_anchors=True):
         extracted = decode_json(choice["message"]["content"])
         soft = extracted.pop("preferences", [])
         intent = extracted.pop("intent", None)
+        location = extracted.pop("requested_location", None)
+        if location is not None:
+            if (not isinstance(location, dict) or set(location) != {"name", "type", "city_id"}
+                    or location["type"] not in {"city", "uncertain", "other", "clear"}
+                    or (location["city_id"] is not None and not isinstance(location["city_id"], str))
+                    or (location["name"] is not None and (not isinstance(location["name"], str)
+                        or not 0 < len(location["name"]) <= 120))):
+                raise ValueError("Invalid location metadata")
+            # Names are literal buyer evidence, not model-created labels.
+            if location["type"] == "city" and (not location["name"] or
+                    location["name"].casefold() not in messages[-1]["text"].casefold()):
+                location = dict(name=None, type="uncertain", city_id=None)
+            elif location["type"] == "city":
+                source = re.search(re.escape(location["name"]), messages[-1]["text"], re.I)
+                location = dict(location, name=source[0])
+        raw_city = extracted.get("city_id")
+        if isinstance(raw_city, str) and raw_city not in CITIES:
+            if not 0 < len(raw_city) <= 120:
+                raise ValueError("Invalid city ID")
+            if location is None or location["type"] != "city":
+                mentions = list(PROPER_LOCATION.finditer(messages[-1]["text"]))
+                location = dict(name=mentions[-1]["name"] if mentions else raw_city, type="city", city_id=raw_city)
+            extracted["city_id"] = None
         requested = extracted.pop("requested_categories", None)
         if requested is not None:
             if (not isinstance(requested, list) or len(requested) > 12
@@ -240,7 +264,7 @@ def extract(messages, *, full_history=False, use_anchors=True):
         usage = envelope.get("usage", {})
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         raise ModelError("Gemma вернула неполный ответ или данные вне схемы условий.") from None
-    return ModelQuery(requirements, preferences, intent, requested), ModelTrace(
+    return ModelQuery(requirements, preferences, intent, requested, location), ModelTrace(
         model, _tokens(usage, "prompt_tokens"), _tokens(usage, "completion_tokens"),
         round((time.monotonic() - started) * 1000)
     )

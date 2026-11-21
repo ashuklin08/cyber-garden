@@ -76,7 +76,9 @@ CONTEXT = re.compile(r"\b(?:как\s+раньше|как\s+в\s+первом|(?:
                      r"такой\s+же|те\s+же\s+условия|котор\w*\s+ты\s+предложил)\b")
 CITY_CHANGE = re.compile(r"\b(?:город\s*[:—-]|(?:теперь|лучше|только|ищи|поищи|ищу|перенеси)\s+в\s+|"
                          r"(?:город|самовывоз|переезд)\s+(?:в|из)\s+)")
-PROPER_LOCATION = re.compile(r"(?i:\b(?:в|из|город(?:е)?)\s+)[А-ЯЁ][а-яё-]+")
+# This is only a cue for semantic analysis, never proof that the next word is a city.
+PROPER_LOCATION = re.compile(r"\b(?:(?:в|из)\s+(?:городе\s+)?|город(?:е)?\s+)(?P<name>[а-яё][а-яё-]+)", re.I)
+CITY_CLEAR = re.compile(r"\bгород\s+(?:не\s*важ\w*|не\s+принципиал\w*|люб\w*)\b")
 NEGATED_CITY = re.compile(r"\bне\s+(?:в\s+|из\s+)?$")
 NEGATED_MEASURE = re.compile(rf"\bне\s+(?:(?:ровно|точно|до|от)\s+)?{NUMBER}")
 
@@ -264,7 +266,9 @@ def parse_turn(message, pending, current):
         for match in pattern.finditer(text):
             preceding = text[max(0, match.start() - 16):match.start()]
             (rejected_cities if NEGATED_CITY.search(preceding) else city_hits).add(key)
-    if len(city_hits) == 1:
+    if CITY_CLEAR.search(text):
+        turn.values["city_id"] = None
+    elif len(city_hits) == 1:
         turn.values["city_id"] = city_hits.pop()
     elif city_hits or CITY_CHANGE.search(text) or PROPER_LOCATION.search(message) or "city_id" in pending:
         if len(city_hits) > 1 and ALTERNATIVE.search(text):

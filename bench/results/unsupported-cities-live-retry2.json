@@ -1,0 +1,67 @@
+{
+  "started_at_utc": "2026-11-21T12:26:43.349764+00:00",
+  "team": "team-06",
+  "endpoint": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1",
+  "model": "google/gemma-4-31B-it",
+  "configuration_source": "root .env",
+  "cases": [
+    {
+      "name": "lowercase_moscow",
+      "messages": [
+        {
+          "role": "user",
+          "text": "самовывоз из москвы"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": "москвы",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «москвы»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "novosibirsk",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол в Новосибирске"
+        }
+      ],
+      "passed": false,
+      "error": "Соединение со шлюзом Gemma не установлено или истекло время ожидания."
+    }
+  ],
+  "executed": 2,
+  "passed": 1
+}

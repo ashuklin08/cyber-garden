@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, replace
 
 from buyer.anchors import WORDS, accessory_context, categories_from_dialog
-from buyer.contracts import CATEGORIES, Requirements, read_requirements
+from buyer.contracts import CATEGORIES, CITIES, Requirements, read_requirements
 from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
                                 TEMPERATURE, WIDTH, Preference, normalize, parse_turn, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
@@ -13,6 +13,7 @@ EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
              adjustable_height=None, color_temperature_k=[])
 MISSING_CATEGORY = "В запросе есть товар вне каталога"
 UNSUPPORTED_MESSAGE = "Такого каталога нет. Пожалуйста, выберите из имеющихся"
+UNSUPPORTED_CITY_MESSAGE = "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: "
 LIMIT_OPERATIONS = {"gte": "lower", "gt": "lower", "lte": "upper", "lt": "upper", "eq": "equal"}
 QUESTIONS = {
     "city_id": r"город\w*|самовывоз\w*",
@@ -92,8 +93,12 @@ class LocalState:
     blocked_categories: bool = False
     turn_issue: str | None = None
     unsupported_items: tuple[str, ...] = ()
+    unsupported_city: str | None = None
 
     def decision_questions(self):
+        if self.unsupported_city:
+            return ({"field": "city_id", "text": UNSUPPORTED_CITY_MESSAGE + ", ".join(CITIES.values())
+                     + f". Вы указали: «{self.unsupported_city}»."},)
         if self.blocked_categories:
             names = ", ".join(CATEGORIES.values())
             return ({"field": "categories", "text": UNSUPPORTED_MESSAGE + ". Доступны: " + names + "."},)
@@ -185,10 +190,17 @@ class ConversationManager:
         semantic_refusal = False
         unsupported_items = ()
         turn_issue = None
+        unsupported_city = None
         for message in messages:
             text = normalize(message["text"])
             if message["role"] == "assistant":
                 pending = _pending(text)
+                if UNSUPPORTED_CITY_MESSAGE.casefold() in text.casefold():
+                    source = re.search(r"Вы указали: «([^»]+)»", message["text"])
+                    unsupported_city = source[1] if source else "неизвестный город"
+                    values["city_id"] = None
+                    confirmed.discard("city_id")
+                    unresolved.add("city_id")
                 # Semantic product recognition is replayed via the backend's
                 # refusal, even when the local item grammar missed that product.
                 if normalize(UNSUPPORTED_MESSAGE) in text and not blocked_categories:
@@ -211,6 +223,8 @@ class ConversationManager:
                 continue
             current = read_requirements(values)
             turn = parse_turn(message["text"], pending, current)
+            if "city_id" in turn.values:
+                unsupported_city = None
             turn.preferences.extend(purpose_wishes(text, current.categories))
             mentions_product = any(pattern.search(text) for pattern in WORDS.values())
             shopping_signal = (mentions_product or turn.values or turn.preferences or turn.uncertain
@@ -310,7 +324,8 @@ class ConversationManager:
         return LocalState(requirements, _filter_preferences(preferences,
                           preference_categories if blocked_categories else requirements.categories),
                           frozenset(confirmed), frozenset(unresolved),
-                          frozenset(ambiguous_attributes), needs_model, blocked_categories, turn_issue, unsupported_items)
+                          frozenset(ambiguous_attributes), needs_model, blocked_categories, turn_issue, unsupported_items,
+                          unsupported_city)
 
     def merge(self, local, model, messages=()):
         unknown = tuple(item for item in (*model.requirements.categories, *(model.requested_categories or ()))
@@ -364,6 +379,32 @@ class ConversationManager:
         if not require_model and not local.needs_model:
             return local, None
         model, trace = gemma(messages, full_history=local.needs_model)
+        location = model.requested_location
+        raw_city = model.requirements.city_id
+        if raw_city is not None and raw_city not in CITIES:
+            location = location or dict(name=raw_city, type="city", city_id=raw_city)
+            model = replace(model, requirements=replace(model.requirements, city_id=None))
+        if location is not None:
+            city = location.get("city_id")
+            if location.get("type") == "city":
+                name = normalize(location.get("name") or "")
+                matches = [key for key in CITIES if CITIES_RE[key].fullmatch(name)
+                           or name == normalize(CITIES[key])]
+                city = matches[0] if len(matches) == 1 else None
+            # The registry, never a model assertion of support, is authoritative.
+            if location.get("type") == "city" and city not in CITIES:
+                local = replace(local, unsupported_city=location.get("name") or "неизвестный город",
+                                turn_issue=None, confirmed=local.confirmed - {"city_id"})
+            elif location.get("type") in {"clear", "uncertain", "other"} or city in CITIES:
+                local = replace(local, unsupported_city=None, turn_issue=None,
+                                requirements=replace(local.requirements, city_id=city if city in CITIES else None),
+                                confirmed=local.confirmed | {"city_id"})
+        if local.unsupported_city:
+            # Merge compatible facts and wishes, then prevent both stale-city
+            # selection and an unsupported ID reaching search or presentation.
+            merged = self.merge(replace(local, turn_issue=None), model, messages)
+            return replace(merged, unsupported_city=local.unsupported_city,
+                           requirements=replace(merged.requirements, city_id=None)), trace
         if local.blocked_categories:
             # A model intent label must not override deterministic item evidence.
             return self.merge(local, model, messages), trace

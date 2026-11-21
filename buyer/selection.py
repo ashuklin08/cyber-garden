@@ -14,7 +14,7 @@ UNITS = {"table": "см", "lamp": "К"}
 LABELS = {"table": "Ширина стола", "chair": "Регулировка высоты", "lamp": "Температура света"}
 QUESTIONS = {
     "budget_rub": "Какой у вас максимальный бюджет на весь комплект?",
-    "city_id": "В каком городе нужен самовывоз — Таганрог, Ростов-на-Дону или Азов?",
+    "city_id": "В каком городе нужен самовывоз?",
     "categories": "Что подобрать из каталога — стол, кресло или лампу? Можно выбрать несколько.",
 }
 
@@ -152,7 +152,7 @@ def filter_listings(listings, requirements):
 
 def clarification_questions(requirements):
     return [
-        {"field": field, "text": question}
+        {"field": field, "text": question + (" Доступны: " + ", ".join(CITIES.values()) + "." if field == "city_id" else "")}
         for field, question in QUESTIONS.items()
         if getattr(requirements, field) is None or (field == "categories" and not requirements.categories)
     ]

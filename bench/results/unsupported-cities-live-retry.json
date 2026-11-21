@@ -1,0 +1,102 @@
+{
+  "started_at_utc": "2026-11-21T12:25:17.135491+00:00",
+  "team": "team-06",
+  "endpoint": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1",
+  "model": "google/gemma-4-31B-it",
+  "configuration_source": "root .env",
+  "cases": [
+    {
+      "name": "lowercase_moscow",
+      "messages": [
+        {
+          "role": "user",
+          "text": "самовывоз из москвы"
+        }
+      ],
+      "passed": false,
+      "error": "Соединение со шлюзом Gemma не установлено или истекло время ожидания."
+    },
+    {
+      "name": "novosibirsk",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол в Новосибирске"
+        }
+      ],
+      "passed": false,
+      "error": "Соединение со шлюзом Gemma не установлено или истекло время ожидания."
+    },
+    {
+      "name": "replace_unknown",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол, кресло и лампа. Таганрог. До 15000 рублей"
+        },
+        {
+          "role": "assistant",
+          "text": "Подобрал комплект"
+        },
+        {
+          "role": "user",
+          "text": "Хочу забрать в Москве"
+        },
+        {
+          "role": "assistant",
+          "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Москве»."
+        },
+        {
+          "role": "user",
+          "text": "А в Краснодаре?"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": 15000,
+          "categories": [
+            "table",
+            "chair",
+            "lamp"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": "Краснодаре",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Краснодаре»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": 15000,
+        "categories": [
+          "table",
+          "chair",
+          "lamp"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    }
+  ],
+  "executed": 3,
+  "passed": 1
+}
