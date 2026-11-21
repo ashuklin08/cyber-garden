@@ -294,17 +294,16 @@ class DialogueFlowTest(unittest.TestCase):
                 self.assertEqual(body["items"], {})
 
     def test_polish_unsupported_goods_have_safe_specific_wording(self):
-        for text, name, removal in (("Найди холодильник", "Холодильники", "Холодильник больше не нужен"),
-                                    ("Нужен диван", "Диваны", "Диван больше не нужен"),
-                                    ("Хочу купить шкаф", "Шкафы", "Шкаф больше не нужен")):
+        for text, removal in (("Найди холодильник", "Холодильник больше не нужен"),
+                              ("Нужен диван", "Диван больше не нужен"),
+                              ("Хочу купить шкаф", "Шкаф больше не нужен")):
             with self.subTest(text=text):
                 messages = dialog(BASE, "Подобрал комплект.", text)
                 self.reply["intent"] = "shopping"
                 body = self.post(messages)
                 self.assertEqual(body["response"]["status"], "clarify")
                 wording = " ".join(q["text"] for q in body["response"]["questions"])
-                self.assertIn(name, wording)
-                self.assertIn("нет категории", wording)
+                self.assertIn("Такого каталога нет. Пожалуйста, выберите из имеющихся", wording)
                 self.assertEqual(body["items"], {})
                 restored = self.resolve(messages + [{"role": "assistant", "text": wording},
                                                     {"role": "user", "text": removal}])

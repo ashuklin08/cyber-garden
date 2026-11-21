@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, replace
 
 from buyer.anchors import WORDS, accessory_context, categories_from_dialog
-from buyer.contracts import Requirements, read_requirements
+from buyer.contracts import CATEGORIES, Requirements, read_requirements
 from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
                                 TEMPERATURE, WIDTH, Preference, normalize, parse_turn, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
@@ -12,7 +12,7 @@ from buyer.preferences import category_text, evolve, grounded, purpose_wishes
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
              adjustable_height=None, color_temperature_k=[])
 MISSING_CATEGORY = "В запросе есть товар вне каталога"
-UNSUPPORTED_NAMES = {"холодильник": "Холодильники", "диван": "Диваны", "шкаф": "Шкафы"}
+UNSUPPORTED_MESSAGE = "Такого каталога нет. Пожалуйста, выберите из имеющихся"
 LIMIT_OPERATIONS = {"gte": "lower", "gt": "lower", "lte": "upper", "lt": "upper", "eq": "equal"}
 QUESTIONS = {
     "city_id": r"город\w*|самовывоз\w*",
@@ -94,6 +94,9 @@ class LocalState:
     unsupported_items: tuple[str, ...] = ()
 
     def decision_questions(self):
+        if self.blocked_categories:
+            names = ", ".join(CATEGORIES.values())
+            return ({"field": "categories", "text": UNSUPPORTED_MESSAGE + ". Доступны: " + names + "."},)
         if self.turn_issue == "bundle_rejected":
             return ({"field": "categories", "text":
                      "Понял, вам нужен один товар. Что именно показать — стол, кресло или лампу?"},)
@@ -101,17 +104,6 @@ class LocalState:
             return ({"field": "categories", "text": OFF_TOPIC_QUESTION},)
         if self.turn_issue == "ambiguous":
             return ({"field": "categories", "text": DOMAIN_QUESTION},)
-        if self.blocked_categories:
-            # Labels come only from reviewed local names, never an invented
-            # model label or an arbitrary word from a buyer message.
-            from buyer.selection import clarification_questions
-            names = [UNSUPPORTED_NAMES[item] for item in self.unsupported_items if item in UNSUPPORTED_NAMES]
-            text = ("К сожалению, в текущем каталоге нет " + ("категории" if len(names) == 1 else "категорий") + " «" + "», «".join(names)
-                    + "». Сейчас доступны столы, кресла и лампы. Может быть, вас интересует что-то из них?"
-                    if names else "Запрошенной категории нет в текущем каталоге. Доступны столы, кресла и лампы. Что из них вам показать?")
-            questions = clarification_questions(self.requirements)
-            return tuple(dict(question, text=text) if question["field"] == "categories" else question
-                         for question in questions)
         if self.turn_issue in {"price", "chair_price"}:
             questions = [{"field": "budget_rub", "text":
                           "Указанное число — цена одного товара или общий бюджет на весь комплект?"}]
@@ -190,12 +182,20 @@ class ConversationManager:
         needs_model = False
         composition_history = []
         blocked_categories = False
+        semantic_refusal = False
         unsupported_items = ()
         turn_issue = None
         for message in messages:
             text = normalize(message["text"])
             if message["role"] == "assistant":
                 pending = _pending(text)
+                # Semantic product recognition is replayed via the backend's
+                # refusal, even when the local item grammar missed that product.
+                if normalize(UNSUPPORTED_MESSAGE) in text and not blocked_categories:
+                    semantic_refusal = True
+                    blocked_categories = True
+                    unresolved.add("categories")
+                    confirmed.discard("categories")
                 continue
 
             turn_issue = None
@@ -231,6 +231,10 @@ class ConversationManager:
             composition_history.append({"role": "user", "text": composition})
             anchor = categories_from_dialog(composition_history)
             recognized, categories = _category_update(composition, current.categories, "categories" in pending)
+            if semantic_refusal and recognized and categories:
+                semantic_refusal = False
+                composition_history = [{"role": "user", "text": composition}]
+                anchor = categories_from_dialog(composition_history)
             if switching_product:
                 replacement = categories_from_dialog([{"role": "user", "text": composition}])
                 if replacement.categories:
@@ -241,13 +245,19 @@ class ConversationManager:
                     preferences = ()
             mentions = any(pattern.search(composition) for pattern in WORDS.values())
             was_blocked = blocked_categories
-            blocked_categories = bool(anchor.pending_unknown)
+            blocked_categories = bool(anchor.pending_unknown) or semantic_refusal
             unsupported_items = anchor.pending_unknown
             if blocked_categories:
                 # Retain the known part for replay, but never confirm a partial set.
                 values["categories"] = list(anchor.supported)
                 turn.uncertain.add("categories")
                 turn.values.pop("categories", None)
+                if not mentions:
+                    for field in ATTRIBUTES:
+                        turn.values.pop(field, None)
+                        turn.uncertain.discard(field)
+                        turn.ambiguous_attributes.discard(field)
+                    turn.preferences.clear()
             elif was_blocked and anchor.categories:
                 turn.values["categories"] = list(anchor.categories)
             elif recognized:
@@ -293,14 +303,32 @@ class ConversationManager:
                 preferences = _filter_preferences(preferences, new_categories)
 
         # An uncertain last edit cannot reuse the old value in a local-only result.
+        preference_categories = tuple(values["categories"] or ())
         for field in unresolved:
             values[field] = EMPTY[field]
         requirements = read_requirements(values)
-        return LocalState(requirements, _filter_preferences(preferences, requirements.categories),
+        return LocalState(requirements, _filter_preferences(preferences,
+                          preference_categories if blocked_categories else requirements.categories),
                           frozenset(confirmed), frozenset(unresolved),
                           frozenset(ambiguous_attributes), needs_model, blocked_categories, turn_issue, unsupported_items)
 
     def merge(self, local, model, messages=()):
+        unknown = tuple(item for item in (*model.requirements.categories, *(model.requested_categories or ()))
+                        if item not in CATEGORIES)
+        if local.blocked_categories or unknown:
+            # Do not let an unsupported product overwrite compatible purchase
+            # facts or create preferences for a different supported product.
+            requirements = replace(local.requirements, categories=(), **{
+                field: getattr(model.requirements, field)
+                for field in ("city_id", "budget_rub") if field not in local.confirmed
+            })
+            history = messages[:-1]
+            old_preferences = grounded(model.preferences, history) if history else ()
+            preferences = tuple(dict.fromkeys((*local.preferences, *old_preferences)))
+            return replace(local, requirements=requirements, preferences=preferences,
+                           blocked_categories=True, turn_issue=None,
+                           unresolved=local.unresolved | {"categories"},
+                           unsupported_items=tuple(dict.fromkeys((*local.unsupported_items, *unknown))))
         if local.turn_issue:
             # Ground preserved model-only wishes in earlier buyer turns, never
             # in the unrelated/ambiguous current text or assistant suggestions.
@@ -323,8 +351,6 @@ class ConversationManager:
         fields = {field: getattr(local.requirements, field)
                   for field in local.confirmed | local.ambiguous_attributes}
         requirements = replace(model.requirements, **fields)
-        if local.blocked_categories:
-            requirements = replace(requirements, categories=())
         preferences = (evolve(tuple(pref for pref in local.preferences if pref.attribute),
                               grounded((*local.preferences, *model.preferences), messages), "")
                        if messages else evolve(local.preferences, model.preferences, ""))
@@ -338,6 +364,9 @@ class ConversationManager:
         if not require_model and not local.needs_model:
             return local, None
         model, trace = gemma(messages, full_history=local.needs_model)
+        if local.blocked_categories:
+            # A model intent label must not override deterministic item evidence.
+            return self.merge(local, model, messages), trace
         if model.intent in {"off_topic", "ambiguous"} and not local.turn_issue:
             previous_messages = messages[:-2] if len(messages) > 1 else []
             previous = self.local(previous_messages)

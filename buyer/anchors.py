@@ -37,7 +37,7 @@ class CategoryAnchor:
 ITEM_CUE = re.compile(r"\b(?:" + ADDITIONS + r"|и|без|убери|исключи|удали|"
                       r"нуж\w*|хочу|ищу|найди|подбери|купить|закажи|только)\s+"
                       r"(?:(?:\w+(?:ый|ий|ой|ая|яя|ое|ые|ую|ого|ому|ыми|ых)|очень|еще|мне)\s+){0,3}$")
-NON_ITEMS = re.compile(r"^(?:а|и|но|чтобы|котор\w*|где|покажи|покажите|предложи|предложите|расскажи|вариант\w*|вместе|в|на|до|от|не|еще|также|все|тот|те|же|теперь|лучше|минимум|максимум|"
+NON_ITEMS = re.compile(r"^(?:а|и|но|чтобы|котор\w*|где|покажи|покажите|предложи|предложите|расскажи|узнать|вариант\w*|вместе|в|на|до|от|не|еще|также|все|тот|те|же|теперь|лучше|минимум|максимум|"
                        r"шире|уже|больше|меньше|выше|ниже|более|менее|"
                        r"желательн\w*|предпочтительн\w*|обязательн\w*|очень|нуж\w*|"
                        r"хочу|ищу|добавь|добавить|убери|без|только|вместо|подбери|найди|купить|закажи|"
@@ -128,6 +128,13 @@ def categories_from_dialog(messages, initial=()):
             previous_end, previous_removed = end, removed
         if adds & removes:
             return CategoryAnchor(None, "Противоречивое изменение состава")
+
+        # Choosing an available product after a refusal resolves the unknown
+        # request. A constraint-only reply or removal does not imply consent.
+        if unsupported_requested and adds and not _unknown_items(text):
+            unsupported_requested.clear()
+            if not ADD.search(text) and not removes:
+                only_category = True
 
         if not selected or only_category:
             selected = adds

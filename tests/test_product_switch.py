@@ -21,7 +21,7 @@ class ProductSwitchTest(unittest.TestCase):
         state = ConversationManager().local([
             {"role": "user", "text": "Хочу велосипед в Таганроге до 10000 рублей"}])
         self.assertTrue(state.blocked_categories)
-        self.assertIn("категории нет", state.decision_questions()[0]["text"])
+        self.assertIn("Такого каталога нет. Пожалуйста, выберите из имеющихся", state.decision_questions()[0]["text"])
 
     def test_million_ruble_budget(self):
         for amount in ("2 миллиона рублей", "два миллиона рублей", "2 млн"):

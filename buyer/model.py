@@ -13,7 +13,7 @@ from http.client import HTTPException
 from urllib.parse import urlsplit
 
 from buyer.anchors import categories_from_dialog
-from buyer.contracts import ROOT, Requirements, decode_json, read_requirements
+from buyer.contracts import CATEGORIES, ROOT, Requirements, decode_json, read_requirements
 from buyer.prompt import SYSTEM
 from buyer.query_parser import Preference
 from buyer.preferences import grounded
@@ -43,6 +43,7 @@ class ModelQuery:
     requirements: Requirements
     preferences: tuple[Preference, ...]
     intent: str | None = None
+    requested_categories: tuple[str, ...] | None = None
 
 
 def configuration():
@@ -210,6 +211,23 @@ def extract(messages, *, full_history=False, use_anchors=True):
         extracted = decode_json(choice["message"]["content"])
         soft = extracted.pop("preferences", [])
         intent = extracted.pop("intent", None)
+        requested = extracted.pop("requested_categories", None)
+        if requested is not None:
+            if (not isinstance(requested, list) or len(requested) > 12
+                    or any(not isinstance(item, str) or not 0 < len(item.strip()) <= 120
+                           for item in requested)):
+                raise ValueError("Invalid requested categories")
+            requested = tuple(dict.fromkeys(item.strip() for item in requested))
+        # Unknown string IDs are a category refusal, not a transport failure or
+        # permission to substitute another product. Other malformed fields still fail.
+        raw_categories = extracted.get("categories")
+        if isinstance(raw_categories, list) and all(isinstance(item, str) for item in raw_categories):
+            unknown = [item for item in raw_categories if item not in CATEGORIES]
+            if unknown:
+                if len(raw_categories) > 12 or any(not 0 < len(item.strip()) <= 120 for item in unknown):
+                    raise ValueError("Invalid category IDs")
+                requested = tuple(dict.fromkeys((*(requested or ()), *unknown)))
+                extracted["categories"] = [item for item in raw_categories if item in CATEGORIES]
         if intent not in (None, "shopping", "off_topic", "ambiguous", "reset"):
             raise ValueError("Unknown turn intent")
         for field in ("width_cm", "color_temperature_k"):
@@ -222,7 +240,7 @@ def extract(messages, *, full_history=False, use_anchors=True):
         usage = envelope.get("usage", {})
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         raise ModelError("Gemma вернула неполный ответ или данные вне схемы условий.") from None
-    return ModelQuery(requirements, preferences, intent), ModelTrace(
+    return ModelQuery(requirements, preferences, intent, requested), ModelTrace(
         model, _tokens(usage, "prompt_tokens"), _tokens(usage, "completion_tokens"),
         round((time.monotonic() - started) * 1000)
     )
@@ -232,5 +250,5 @@ def _preferences(raw, messages):
     if not isinstance(raw, list) or len(raw) > 12:
         return ()
     return grounded(tuple(Preference(item["category"], item["text"].strip()) for item in raw
-                          if isinstance(item, dict) and item.get("category") in ("table", "chair", "lamp")
+                          if isinstance(item, dict) and item.get("category") in CATEGORIES
                           and isinstance(item.get("text"), str) and 0 < len(item["text"].strip()) <= 120), messages)
