@@ -1,0 +1,4 @@
+# Optional CPU-only visual search. The main CLI/web app does not import these.
+numpy==2.2.6
+Pillow==11.3.0
+onnxruntime==1.23.2

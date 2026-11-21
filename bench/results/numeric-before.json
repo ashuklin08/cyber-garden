@@ -1,0 +1,53 @@
+[
+  {
+    "text": "стол Азов 13.000 км 100 руб",
+    "turn": {
+      "values": {
+        "city_id": "azov",
+        "budget_rub": 100
+      },
+      "uncertain": "set()",
+      "preferences": [],
+      "ambiguous_attributes": "set()",
+      "needs_model": false
+    },
+    "resolved": {
+      "city_id": "azov",
+      "budget_rub": null,
+      "categories": [
+        "table"
+      ],
+      "width_cm": [],
+      "adjustable_height": null,
+      "color_temperature_k": []
+    }
+  },
+  {
+    "text": "Стол в Азове. Бюджет 13 000 км",
+    "turn": {
+      "values": {
+        "city_id": "azov",
+        "budget_rub": 13000
+      },
+      "uncertain": "set()",
+      "preferences": [],
+      "ambiguous_attributes": "set()",
+      "needs_model": false
+    },
+    "resolved": {
+      "city_id": "azov",
+      "budget_rub": 13000,
+      "categories": [
+        "table"
+      ],
+      "width_cm": [
+        {
+          "operation": "lte",
+          "value": "100"
+        }
+      ],
+      "adjustable_height": null,
+      "color_temperature_k": []
+    }
+  }
+]

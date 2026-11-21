@@ -1,0 +1,876 @@
+{
+  "started_at_utc": "2026-11-21T12:02:36.970196+00:00",
+  "team": "team-06",
+  "endpoint": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1",
+  "model": "google/gemma-4-31B-it",
+  "configuration_source": "root .env",
+  "planned": 8,
+  "executed": 8,
+  "passed": 8,
+  "cases": [
+    {
+      "name": "car",
+      "situation": "A",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Найди автомобиль"
+        }
+      ],
+      "expected_status": "clarify",
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "автомобиль"
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Такого каталога нет. Пожалуйста, выберите из имеющихся. Доступны: Стол, Кресло, Лампа."
+          }
+        ]
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:02:36.995956+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:02:36.991312+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":null,\"budget_rub\":null,\"categories\":null,\"width_cm\":[],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":[\"автомобиль\"]}"
+                }
+              }
+            ],
+            "id": "chatcmpl-RMb08dvWc1GdCLBKLVl5ry6Y",
+            "object": "chat.completion",
+            "created": 1795262562,
+            "usage": {
+              "prompt_tokens": 1718,
+              "completion_tokens": 51,
+              "total_tokens": 1769,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 5201.338
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": null,
+            "budget_rub": null,
+            "categories": [],
+            "width_cm": [],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [
+            "categories"
+          ],
+          "ambiguous_attributes": []
+        }
+      ]
+    },
+    {
+      "name": "fridge",
+      "situation": "A",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Хочу холодильник"
+        }
+      ],
+      "expected_status": "clarify",
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "холодильник"
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Такого каталога нет. Пожалуйста, выберите из имеющихся. Доступны: Стол, Кресло, Лампа."
+          }
+        ]
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:02:43.995860+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:02:43.989280+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":null,\"budget_rub\":null,\"categories\":null,\"width_cm\":[],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":[\"холодильник\"]}"
+                }
+              }
+            ],
+            "id": "chatcmpl-RKr8YF2EOq7Ase42SbOof0Fj",
+            "object": "chat.completion",
+            "created": 1795262568,
+            "usage": {
+              "prompt_tokens": 1719,
+              "completion_tokens": 52,
+              "total_tokens": 1771,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 4102.076
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": null,
+            "budget_rub": null,
+            "categories": [],
+            "width_cm": [],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [
+            "categories"
+          ],
+          "ambiguous_attributes": []
+        }
+      ]
+    },
+    {
+      "name": "bicycle",
+      "situation": "A",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Подбери велосипед"
+        }
+      ],
+      "expected_status": "clarify",
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "велосипед"
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Такого каталога нет. Пожалуйста, выберите из имеющихся. Доступны: Стол, Кресло, Лампа."
+          }
+        ]
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:02:50.979986+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:02:50.979986+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":null,\"budget_rub\":null,\"categories\":null,\"width_cm\":[],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":[\"велосипед\"]}"
+                }
+              }
+            ],
+            "id": "chatcmpl-Rpb05jWLvY9Msi143ZDkhk7Z",
+            "object": "chat.completion",
+            "created": 1795262574,
+            "usage": {
+              "prompt_tokens": 1720,
+              "completion_tokens": 52,
+              "total_tokens": 1772,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 3384.139
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": null,
+            "budget_rub": null,
+            "categories": [],
+            "width_cm": [],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [
+            "categories"
+          ],
+          "ambiguous_attributes": []
+        }
+      ]
+    },
+    {
+      "name": "sofa",
+      "situation": "A",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Нужен диван"
+        }
+      ],
+      "expected_status": "clarify",
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "диван"
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Такого каталога нет. Пожалуйста, выберите из имеющихся. Доступны: Стол, Кресло, Лампа."
+          }
+        ]
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:02:57.995483+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:02:57.988346+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":null,\"budget_rub\":null,\"categories\":null,\"width_cm\":[],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":[\"диван\"]}"
+                }
+              }
+            ],
+            "id": "chatcmpl-RYOBFZB8nL2MQ6YoGoH9i626",
+            "object": "chat.completion",
+            "created": 1795262581,
+            "usage": {
+              "prompt_tokens": 1719,
+              "completion_tokens": 50,
+              "total_tokens": 1769,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 2538.62
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": null,
+            "budget_rub": null,
+            "categories": [],
+            "width_cm": [],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [
+            "categories"
+          ],
+          "ambiguous_attributes": []
+        }
+      ]
+    },
+    {
+      "name": "preserve_city_budget",
+      "situation": "A",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол не шире 100 см в Азове, бюджет 5000 рублей"
+        },
+        {
+          "role": "assistant",
+          "text": "Подобрал стол"
+        },
+        {
+          "role": "user",
+          "text": "Хочу холодильник"
+        }
+      ],
+      "expected_status": "clarify",
+      "model_query": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": 5000,
+          "categories": [],
+          "width_cm": [
+            {
+              "operation": "lte",
+              "value": "100"
+            }
+          ],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "холодильник"
+        ]
+      },
+      "requirements": {
+        "city_id": "azov",
+        "budget_rub": 5000,
+        "categories": [],
+        "width_cm": [
+          {
+            "operation": "lte",
+            "value": "100"
+          }
+        ],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Такого каталога нет. Пожалуйста, выберите из имеющихся. Доступны: Стол, Кресло, Лампа."
+          }
+        ]
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:03:04.992970+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:03:04.983965+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":\"azov\",\"budget_rub\":5000,\"categories\":null,\"width_cm\":[[\"lte\",100]],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":[\"холодильник\"]}"
+                }
+              }
+            ],
+            "id": "chatcmpl-RGFmcHC60Uozx9ypTtu46rKM",
+            "object": "chat.completion",
+            "created": 1795262588,
+            "usage": {
+              "prompt_tokens": 1756,
+              "completion_tokens": 63,
+              "total_tokens": 1819,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 2670.048
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": "azov",
+            "budget_rub": 5000,
+            "categories": [],
+            "width_cm": [
+              {
+                "operation": "lte",
+                "value": "100"
+              }
+            ],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [
+            "categories"
+          ],
+          "ambiguous_attributes": []
+        }
+      ]
+    },
+    {
+      "name": "resume_table",
+      "situation": "resume",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол не шире 100 см в Азове, бюджет 5000 рублей"
+        },
+        {
+          "role": "assistant",
+          "text": "Подобрал стол"
+        },
+        {
+          "role": "user",
+          "text": "Хочу холодильник"
+        },
+        {
+          "role": "assistant",
+          "text": "Такого каталога нет. Пожалуйста, выберите из имеющихся. Доступны: Стол, Кресло, Лампа."
+        },
+        {
+          "role": "user",
+          "text": "Тогда найди стол"
+        }
+      ],
+      "expected_status": "ok",
+      "model_query": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": 5000,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [
+            {
+              "operation": "lte",
+              "value": "100"
+            }
+          ],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ]
+      },
+      "requirements": {
+        "city_id": "azov",
+        "budget_rub": 5000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [
+          {
+            "operation": "lte",
+            "value": "100"
+          }
+        ],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "ok",
+        "options": [
+          {
+            "listing_ids": [
+              "azTable"
+            ],
+            "total_rub": 2000,
+            "explanation": "Самовывоз · Азов. Стол — 2 000 ₽ (ширина стола 100 см). Итого 2 000 ₽. Запас бюджета 3 000 ₽."
+          }
+        ]
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:03:11.996362+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:03:11.984601+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":\"azov\",\"budget_rub\":5000,\"categories\":[\"table\"],\"width_cm\":[[\"lte\",100]],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":[\"table\"]}"
+                }
+              }
+            ],
+            "id": "chatcmpl-ReGqOcBt3IYLgTGbk58MwZ6W",
+            "object": "chat.completion",
+            "created": 1795262596,
+            "usage": {
+              "prompt_tokens": 1811,
+              "completion_tokens": 60,
+              "total_tokens": 1871,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 3613.94
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": "azov",
+            "budget_rub": 5000,
+            "categories": [
+              "table"
+            ],
+            "width_cm": [
+              {
+                "operation": "lte",
+                "value": "100"
+              }
+            ],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [],
+          "ambiguous_attributes": []
+        }
+      ]
+    },
+    {
+      "name": "supported_category_absent",
+      "situation": "B",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Кресло в Таганроге, бюджет 5000 рублей"
+        }
+      ],
+      "expected_status": "no_match",
+      "model_query": {
+        "requirements": {
+          "city_id": "taganrog",
+          "budget_rub": 5000,
+          "categories": [
+            "chair"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "chair"
+        ]
+      },
+      "requirements": {
+        "city_id": "taganrog",
+        "budget_rub": 5000,
+        "categories": [
+          "chair"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "no_match",
+        "message": "Город самовывоза — Таганрог. «Кресло» отсутствует в каталоге. Подойдёт другой город или другой состав комплекта?"
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:03:18.995036+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:03:18.991316+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":\"taganrog\",\"budget_rub\":5000,\"categories\":[\"chair\"],\"width_cm\":[],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":[\"chair\"]}"
+                }
+              }
+            ],
+            "id": "chatcmpl-R2LFoawMHlOddzilZxWvfUUw",
+            "object": "chat.completion",
+            "created": 1795262603,
+            "usage": {
+              "prompt_tokens": 1743,
+              "completion_tokens": 54,
+              "total_tokens": 1797,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 4203.999
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": "taganrog",
+            "budget_rub": 5000,
+            "categories": [
+              "chair"
+            ],
+            "width_cm": [],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [],
+          "ambiguous_attributes": []
+        }
+      ]
+    },
+    {
+      "name": "supported_category_filtered",
+      "situation": "C",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол не шире 90 см в Таганроге, бюджет 5000 рублей"
+        }
+      ],
+      "expected_status": "no_match",
+      "model_query": {
+        "requirements": {
+          "city_id": "taganrog",
+          "budget_rub": 5000,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [
+            {
+              "operation": "lte",
+              "value": "90"
+            }
+          ],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null
+      },
+      "requirements": {
+        "city_id": "taganrog",
+        "budget_rub": 5000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [
+          {
+            "operation": "lte",
+            "value": "90"
+          }
+        ],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "response": {
+        "status": "no_match",
+        "message": "Город самовывоза — Таганрог. Для «Стол» нет подтверждённого соответствия условию «ширина стола ≤ 90 см» (ближайшее подтверждённое значение: 120 см). Какую характеристику можно изменить или рассмотреть другой город?"
+      },
+      "passed": true,
+      "gateway_events": [
+        {
+          "kind": "http_attempt",
+          "utc": "2026-11-21T12:03:25.997202+00:00",
+          "url": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1/chat/completions",
+          "status": 200
+        },
+        {
+          "kind": "model_response",
+          "utc": "2026-11-21T12:03:25.992191+00:00",
+          "success": true,
+          "response": {
+            "model": "google/gemma-4-31B-it",
+            "choices": [
+              {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                  "role": "assistant",
+                  "content": "{\"city_id\":\"taganrog\",\"budget_rub\":5000,\"categories\":[\"table\"],\"width_cm\":[[\"lte\",90]],\"adjustable_height\":null,\"color_temperature_k\":[],\"preferences\":[],\"intent\":\"shopping\",\"requested_categories\":null}"
+                }
+              }
+            ],
+            "id": "chatcmpl-Ry9XenrCmZYPUxNdqecztKAJ",
+            "object": "chat.completion",
+            "created": 1795262608,
+            "usage": {
+              "prompt_tokens": 1749,
+              "completion_tokens": 60,
+              "total_tokens": 1809,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              }
+            }
+          },
+          "gateway_ms": 2296.21
+        },
+        {
+          "kind": "resolved_state",
+          "requirements": {
+            "city_id": "taganrog",
+            "budget_rub": 5000,
+            "categories": [
+              "table"
+            ],
+            "width_cm": [
+              {
+                "operation": "lte",
+                "value": "90"
+              }
+            ],
+            "adjustable_height": null,
+            "color_temperature_k": []
+          },
+          "preferences": [],
+          "unresolved": [],
+          "ambiguous_attributes": []
+        }
+      ]
+    }
+  ]
+}

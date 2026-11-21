@@ -1,0 +1,163 @@
+{
+  "model": "nomic-ai/nomic-embed-vision-v1.5",
+  "revision": "e3a725bce72db07ca4adb1d83da08903f3ee02f8",
+  "weight_bytes": 96745606,
+  "weight_sha256": "ba9107df6e412828dae8c675096209aa39f6536de8ec8d9a872665b54dc750c3",
+  "cpu": true,
+  "real_weights": true,
+  "build": {
+    "model_load_ms": 504.03449870646,
+    "build_ms": 1027.65859849751
+  },
+  "cases": [
+    {
+      "name": "table",
+      "expected": "t12",
+      "passed": true,
+      "wall_ms": 1252.5884993374348,
+      "response": {
+        "status": "ok",
+        "results": [
+          {
+            "rank": 1,
+            "listing_id": "t12",
+            "title": "Письменный стол",
+            "category": "Стол",
+            "city": "Таганрог",
+            "price_rub": 6500,
+            "image_path": "products/table.png",
+            "synthetic": true
+          }
+        ],
+        "message": "Демонстрационные изображения, а не фотографии продавцов.",
+        "coverage": {
+          "indexed": 3,
+          "total": 111
+        },
+        "catalog_changed": false,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 125.22800080478191,
+          "cosine_ms": 0.04249997437000275,
+          "total_ms": 830.7796008884907
+        },
+        "api_ms": 1159.6614997833967
+      }
+    },
+    {
+      "name": "chair",
+      "expected": "c04",
+      "passed": true,
+      "wall_ms": 247.27270007133484,
+      "response": {
+        "status": "ok",
+        "results": [
+          {
+            "rank": 1,
+            "listing_id": "c04",
+            "title": "Рабочее кресло",
+            "category": "Кресло",
+            "city": "Таганрог",
+            "price_rub": 4200,
+            "image_path": "products/chair.png",
+            "synthetic": true
+          }
+        ],
+        "message": "Демонстрационные изображения, а не фотографии продавцов.",
+        "coverage": {
+          "indexed": 3,
+          "total": 111
+        },
+        "catalog_changed": false,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 122.70460091531277,
+          "cosine_ms": 0.03110058605670929,
+          "total_ms": 170.2897995710373
+        },
+        "api_ms": 174.8490985482931
+      }
+    },
+    {
+      "name": "lamp",
+      "expected": "l09",
+      "passed": true,
+      "wall_ms": 228.03760133683681,
+      "response": {
+        "status": "ok",
+        "results": [
+          {
+            "rank": 1,
+            "listing_id": "l09",
+            "title": "Настольная лампа",
+            "category": "Лампа",
+            "city": "Таганрог",
+            "price_rub": 1500,
+            "image_path": "products/lamp.png",
+            "synthetic": true
+          }
+        ],
+        "message": "Демонстрационные изображения, а не фотографии продавцов.",
+        "coverage": {
+          "indexed": 3,
+          "total": 111
+        },
+        "catalog_changed": false,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 113.6070005595684,
+          "cosine_ms": 0.02319924533367157,
+          "total_ms": 155.09120002388954
+        },
+        "api_ms": 158.62120129168034
+      }
+    },
+    {
+      "name": "cat",
+      "expected": null,
+      "passed": true,
+      "wall_ms": 282.6173007488251,
+      "response": {
+        "status": "visual_no_match",
+        "results": [],
+        "message": "Не удалось найти достаточно похожие товары. Попробуйте другое изображение или воспользуйтесь текстовым поиском.",
+        "coverage": {
+          "indexed": 3,
+          "total": 111
+        },
+        "catalog_changed": false,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 125.67929923534393,
+          "cosine_ms": 0.024199485778808594,
+          "total_ms": 178.58700081706047
+        },
+        "api_ms": 183.7346013635397
+      }
+    },
+    {
+      "name": "landscape",
+      "expected": null,
+      "passed": true,
+      "wall_ms": 275.1768995076418,
+      "response": {
+        "status": "visual_no_match",
+        "results": [],
+        "message": "Не удалось найти достаточно похожие товары. Попробуйте другое изображение или воспользуйтесь текстовым поиском.",
+        "coverage": {
+          "indexed": 3,
+          "total": 111
+        },
+        "catalog_changed": false,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 126.53540074825287,
+          "cosine_ms": 0.033799558877944946,
+          "total_ms": 177.98270098865032
+        },
+        "api_ms": 184.55320037901402
+      }
+    }
+  ],
+  "passed": 5
+}

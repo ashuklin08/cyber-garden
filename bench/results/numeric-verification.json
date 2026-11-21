@@ -1,0 +1,87 @@
+{
+  "changed_files": [
+    "buyer/query_parser.py",
+    "buyer/conversation.py",
+    "buyer/prompt.py",
+    "tests/test_numeric_units.py",
+    "bench/numeric_units_live.py",
+    "README.md"
+  ],
+  "python_passed": 168,
+  "python_total": 168,
+  "dom_passed": 38,
+  "dom_total": 38,
+  "frozen_scenarios": 15,
+  "live_passed": 6,
+  "live_total": 6,
+  "live_report": "numeric-units-live-final.json",
+  "offline_log": "numeric-offline-verified.txt",
+  "baseline_report": "numeric-before.json",
+  "original_result": {
+    "name": "original",
+    "text": "стол Азов 13.000 км 100 руб",
+    "expected": {
+      "city_id": "azov",
+      "budget_rub": null,
+      "categories": [
+        "table"
+      ],
+      "width_cm": [],
+      "adjustable_height": null,
+      "color_temperature_k": []
+    },
+    "model": {
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "preferences": [],
+      "intent": "shopping",
+      "requested_categories": [
+        "table"
+      ],
+      "requested_location": {
+        "name": "Азов",
+        "type": "city",
+        "city_id": "azov"
+      }
+    },
+    "actual": {
+      "city_id": "azov",
+      "budget_rub": null,
+      "categories": [
+        "table"
+      ],
+      "width_cm": [],
+      "adjustable_height": null,
+      "color_temperature_k": []
+    },
+    "response": {
+      "status": "clarify",
+      "questions": [
+        {
+          "field": "categories",
+          "text": "Расстояние не поддерживается условиями каталога. Уточните запрос без этого ограничения."
+        }
+      ]
+    },
+    "passed": true
+  },
+  "protected_files_unchanged": [
+    "buyer/selection.py",
+    "buyer/ranking.py",
+    "buyer/contracts.py",
+    "buyer/model.py",
+    "buyer/demo.py",
+    "run",
+    "schemas/request.schema.json",
+    "schemas/response.schema.json",
+    "data/catalog.json"
+  ]
+}

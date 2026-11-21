@@ -1,0 +1,47 @@
+PASS stale cards disappear while a new request is pending
+PASS no_match displays an explanation outside raw JSON
+PASS equal verified results are described honestly
+PASS reset button clears history, cards and evidence
+PASS typed new dialogue starts an isolated request
+PASS lamp alternatives are individual listings
+PASS one table is one listing
+PASS table chair lamp remain a bundle
+PASS changed bundle receives a fresh result message
+PASS unchanged results name goods and bundles separately
+PASS speech API feature detection supports standard and webkit variants without auto-start
+PASS unsupported speech API leaves text submission working
+PASS microphone click configures Russian continuous interim recognition
+PASS second click stops and end releases the instance for another dictation
+PASS interim text is visible but never enters history or triggers POST
+PASS cumulative resultIndex updates replace interim slots without duplicating finals
+PASS shrinking interim result list removes obsolete provisional text
+PASS dictation preserves existing text and allows editing after end
+PASS manual stop strips interim text and retains final results arriving before end
+PASS empty dictation preserves original field and sends nothing
+PASS explicit form submission sends edited final text through existing history
+PASS Enter sends short dictated clarification through the existing submit handler
+PASS active recording blocks direct, Enter, and form submission with a hint
+PASS speech error no-speech preserves prior text and final fragments
+PASS speech error not-allowed preserves prior text and final fragments
+PASS speech error network preserves prior text and final fragments
+PASS speech error audio-capture preserves prior text and final fragments
+PASS speech error service-not-allowed preserves prior text and final fragments
+PASS speech error language-not-supported preserves prior text and final fragments
+PASS speech error aborted preserves prior text and final fragments
+PASS speech error unknown-error preserves prior text and final fragments
+PASS new dialogue aborts recording and ignores late recognition callbacks
+PASS defence tab stops recognition and keeps finalized text
+PASS sending blocks microphone until the existing request finishes
+PASS server busy error keeps dictated text available for retry
+PASS start exceptions restore editing without clearing text
+PASS automatic end never restarts and old callbacks cannot overwrite a new recording
+PASS error before any final result preserves only the preexisting input
+PASS photo mode opens without changing dialogue and stops active dictation
+PASS photo selection creates preview and removal revokes local URL
+PASS photo POST is multipart and does not mutate history or normal result fingerprint
+PASS unavailable photo search leaves selected file, typed text and speech working
+PASS photo removal aborts pending request and ignores stale results
+PASS drop validates file count, byte size and image dimensions
+PASS visual mode never renders untrusted remote image URLs
+PASS network failure in photo request leaves normal text submission working
+Completed 46 dialogue, speech and photo scenarios; failures: 0

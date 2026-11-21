@@ -1,0 +1,35 @@
+test_broken_or_missing_optional_module_does_not_break_server_or_buy (tests.test_vision_api.VisionApiTest.test_broken_or_missing_optional_module_does_not_break_server_or_buy) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:15:53] "GET /api/catalog HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/buy HTTP/1.1" 200 -
+{"event": "buyer_stage_latency", "status": 200, "gemma_ms": 0.038, "resolve_ms": 4.968, "search_ms": 0.271, "total_ms": 5.468}
+ok
+test_cross_origin_visual_upload_is_rejected (tests.test_vision_api.VisionApiTest.test_cross_origin_visual_upload_is_rejected) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 403 -
+ok
+test_image_paths_not_in_manifest_cannot_be_served (tests.test_vision_api.VisionApiTest.test_image_paths_not_in_manifest_cannot_be_served) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "GET /visual-images/../catalog.json HTTP/1.1" 404 -
+ok
+test_large_upload_rejected_before_reading_body (tests.test_vision_api.VisionApiTest.test_large_upload_rejected_before_reading_body) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 413 -
+ok
+test_missing_assets_and_dependencies_remain_unavailable (tests.test_vision_api.VisionApiTest.test_missing_assets_and_dependencies_remain_unavailable) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 400 -
+ok
+test_model_exception_is_a_controlled_visual_response (tests.test_vision_api.VisionApiTest.test_model_exception_is_a_controlled_visual_response) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 200 -
+ok
+test_no_urls_or_extra_parts_accepted (tests.test_vision_api.VisionApiTest.test_no_urls_or_extra_parts_accepted) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 400 -
+127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 400 -
+127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 400 -
+127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 400 -
+ok
+test_photo_uses_separate_route_without_nlu (tests.test_vision_api.VisionApiTest.test_photo_uses_separate_route_without_nlu) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 200 -
+ok
+test_untrusted_filename_never_used_as_filesystem_path (tests.test_vision_api.VisionApiTest.test_untrusted_filename_never_used_as_filesystem_path) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 400 -
+ok
+test_visual_busy_is_independent_of_gemma_slot (tests.test_vision_api.VisionApiTest.test_visual_busy_is_independent_of_gemma_slot) ... 127.0.0.1 - - [21/Nov/2026 20:15:53] "POST /api/visual-search HTTP/1.1" 429 -
+ok
+test_actual_run_and_server_without_any_visual_subsystem (tests.test_vision_isolation.RemovedVisionCliTest.test_actual_run_and_server_without_any_visual_subsystem) ... ok
+test_core_imports_with_all_vision_imports_and_dependencies_forbidden (tests.test_vision_isolation.VisionIsolationTest.test_core_imports_with_all_vision_imports_and_dependencies_forbidden) ... ok
+test_official_data_and_schemas_match_preimplementation_hashes (tests.test_vision_isolation.VisionIsolationTest.test_official_data_and_schemas_match_preimplementation_hashes) ... ok
+test_worker_timeout_terminates_only_optional_process (tests.test_vision_isolation.VisionIsolationTest.test_worker_timeout_terminates_only_optional_process) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 2.864s
+
+OK

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "images": [
+    {"listing_id": "t12", "path": "products/table.png", "synthetic": true},
+    {"listing_id": "c04", "path": "products/chair.png", "synthetic": true},
+    {"listing_id": "l09", "path": "products/lamp.png", "synthetic": true}
+  ]
+}

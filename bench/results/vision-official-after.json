@@ -1,0 +1,82 @@
+[
+  {
+    "path": "data/catalog.json",
+    "sha256": "8248DA907CB429824CCC720EC93300E16ED99C798AACBD4699C9450CCFAB1C43",
+    "unchanged": true
+  },
+  {
+    "path": "data/categories.json",
+    "sha256": "D08D285002ABD6B8EDFDB101E61BE32858C4939AE936F7EC51067A9580E9956E",
+    "unchanged": true
+  },
+  {
+    "path": "data/cities.json",
+    "sha256": "015E34BE49F53E1DE48A18F28411E1B95D330D5CF34A22BC3563FBD032812E1C",
+    "unchanged": true
+  },
+  {
+    "path": "schemas/catalog.schema.json",
+    "sha256": "CA89553D0B78183AA0FC84AE4B30253CE9F0F358E7E845765057B0BC6A6579B2",
+    "unchanged": true
+  },
+  {
+    "path": "schemas/categories.schema.json",
+    "sha256": "73B7FCB60E251F3DE4F3348DDDF859FB0395FE92618AB0ECD5835768AD5405CE",
+    "unchanged": true
+  },
+  {
+    "path": "schemas/cities.schema.json",
+    "sha256": "516ACB6DB56FF580D0011952E99B9B009A3A0A4B76DE3261346D1F46895DF0CD",
+    "unchanged": true
+  },
+  {
+    "path": "schemas/llm-request.schema.json",
+    "sha256": "981083EEB719A89B9EE4F2904DF708D83F00EB951897E080C7C8E41B230F34D7",
+    "unchanged": true
+  },
+  {
+    "path": "schemas/llm-response.schema.json",
+    "sha256": "D618D5DD3F2E83E31DC82C0251E84360E1BA4D714953DF242E6FE28BB0E4D5AC",
+    "unchanged": true
+  },
+  {
+    "path": "schemas/request.schema.json",
+    "sha256": "770E56BA210009C5E7740F36C6BEB21746189D556711590A62A9CA90F9B5467A",
+    "unchanged": true
+  },
+  {
+    "path": "schemas/response.schema.json",
+    "sha256": "F758537ED7C6A67F45B1621525D059344AE23C5FC015CF6BB94EAF4B45EB4AE2",
+    "unchanged": true
+  },
+  {
+    "path": "examples/01-selection/request.json",
+    "sha256": "1E28792A49FB283D0F89CE5600D24209DA9C5CB27AB7A60F182D1A0B93485E48",
+    "unchanged": true
+  },
+  {
+    "path": "examples/01-selection/response.json",
+    "sha256": "F596FFB2CD2D199720590CA127790DA90DFF40CACFA56168ED92239497DFE144",
+    "unchanged": true
+  },
+  {
+    "path": "examples/02-clarification/request.json",
+    "sha256": "9BF1AE677146788F53644176599F47D726E7921FAAC598306D4893684C617670",
+    "unchanged": true
+  },
+  {
+    "path": "examples/02-clarification/response.json",
+    "sha256": "10E7940ADA8177296C91B089B625647F86A88762740DF75E55066825408D5684",
+    "unchanged": true
+  },
+  {
+    "path": "llm/request.example.json",
+    "sha256": "92FB8491556B01814FCA9A827A6B30B210F9AEAEB2EBC3EF89606BB8266BDEE1",
+    "unchanged": true
+  },
+  {
+    "path": "llm/response.example.json",
+    "sha256": "579836BD77EA54C7A8A5CF55136003D43BA2EDFBBE50C962865341F121913A69",
+    "unchanged": true
+  }
+]

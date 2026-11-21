@@ -1,0 +1,10 @@
+{
+  "model_load_seconds": 0.3506109993904829,
+  "embedding_seconds": [
+    0.09648649953305721,
+    0.09384620003402233
+  ],
+  "dimension": 768,
+  "same_image_cosine": 1.0,
+  "different_image_cosine": 0.6619912385940552
+}

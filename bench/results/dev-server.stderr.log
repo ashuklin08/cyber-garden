@@ -1,0 +1,14 @@
+127.0.0.1 - - [21/Nov/2026 20:26:08] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:26:12] "POST /api/visual-search HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:26:14] "GET /visual-images/products/table.png HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:12] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:12] "GET /app.js HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:12] "GET /styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:12] "GET /api/catalog HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:12] "GET /workspace.webp HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:22] Request timed out: TimeoutError('timed out')
+127.0.0.1 - - [21/Nov/2026 20:31:30] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:30] "GET /styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:30] "GET /app.js HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:30] "GET /api/catalog HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 20:31:30] "GET /workspace.webp HTTP/1.1" 200 -

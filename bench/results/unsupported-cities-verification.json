@@ -1,0 +1,605 @@
+{
+  "offline_tests": 162,
+  "offline_passed": 162,
+  "ui_tests": 10,
+  "ui_passed": 10,
+  "live_scenarios": 11,
+  "live_passed": 10,
+  "attempt_reports": [
+    "bench/results/unsupported-cities-live.json",
+    "bench/results/unsupported-cities-live-retry.json",
+    "bench/results/unsupported-cities-live-retry2.json"
+  ],
+  "cases": [
+    {
+      "name": "clear_unknown",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол, кресло и лампа. Таганрог. До 15000 рублей"
+        },
+        {
+          "role": "assistant",
+          "text": "Подобрал комплект"
+        },
+        {
+          "role": "user",
+          "text": "Хочу забрать в Москве"
+        },
+        {
+          "role": "assistant",
+          "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Москве»."
+        },
+        {
+          "role": "user",
+          "text": "Нет, город неважен"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": 15000,
+          "categories": [
+            "table",
+            "chair",
+            "lamp"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": null,
+          "type": "clear",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "В каком городе нужен самовывоз — Таганрог, Ростов-на-Дону или Азов?"
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": 15000,
+        "categories": [
+          "table",
+          "chair",
+          "lamp"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "lowercase_krasnodar",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Найди стол в краснодаре"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ],
+        "requested_location": {
+          "name": "краснодаре",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «краснодаре»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "lowercase_moscow",
+      "messages": [
+        {
+          "role": "user",
+          "text": "самовывоз из москвы"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": "москвы",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «москвы»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "moscow_after_bundle",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол, кресло и лампа. Таганрог. До 15000 рублей"
+        },
+        {
+          "role": "assistant",
+          "text": "Подобрал комплект"
+        },
+        {
+          "role": "user",
+          "text": "Хочу забрать в Москве"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": 15000,
+          "categories": [
+            "table",
+            "chair",
+            "lamp"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": "Москве",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Москве»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": 15000,
+        "categories": [
+          "table",
+          "chair",
+          "lamp"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "not_a_city",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол в хорошем состоянии в Азове, бюджет 5000 рублей"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": 5000,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [
+          {
+            "category": "table",
+            "text": "в хорошем состоянии",
+            "attribute": null
+          }
+        ],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ],
+        "requested_location": {
+          "name": "Азове",
+          "type": "city",
+          "city_id": "azov"
+        }
+      },
+      "response": {
+        "status": "ok",
+        "options": [
+          {
+            "listing_ids": [
+              "azTable"
+            ],
+            "total_rub": 2000,
+            "explanation": "Самовывоз · Азов. Стол — 2 000 ₽ (ширина стола 100 см). Итого 2 000 ₽. Запас бюджета 3 000 ₽."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": "azov",
+        "budget_rub": 5000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "novosibirsk",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол в Новосибирске"
+        }
+      ],
+      "passed": false,
+      "error": "Соединение со шлюзом Gemma не установлено или истекло время ожидания."
+    },
+    {
+      "name": "piter",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол из питера"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ],
+        "requested_location": {
+          "name": "питера",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «питера»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "replace_unknown",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол, кресло и лампа. Таганрог. До 15000 рублей"
+        },
+        {
+          "role": "assistant",
+          "text": "Подобрал комплект"
+        },
+        {
+          "role": "user",
+          "text": "Хочу забрать в Москве"
+        },
+        {
+          "role": "assistant",
+          "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Москве»."
+        },
+        {
+          "role": "user",
+          "text": "А в Краснодаре?"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": 15000,
+          "categories": [
+            "table",
+            "chair",
+            "lamp"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": "Краснодаре",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Краснодаре»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": 15000,
+        "categories": [
+          "table",
+          "chair",
+          "lamp"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "resume_azov",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол, кресло и лампа. Таганрог. До 15000 рублей"
+        },
+        {
+          "role": "assistant",
+          "text": "Подобрал комплект"
+        },
+        {
+          "role": "user",
+          "text": "Хочу забрать в Москве"
+        },
+        {
+          "role": "assistant",
+          "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Москве»."
+        },
+        {
+          "role": "user",
+          "text": "Тогда в Азове"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": 15000,
+          "categories": [
+            "table",
+            "chair",
+            "lamp"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": "Азове",
+          "type": "city",
+          "city_id": "azov"
+        }
+      },
+      "response": {
+        "status": "ok",
+        "options": [
+          {
+            "listing_ids": [
+              "azTable",
+              "azChair",
+              "azLamp"
+            ],
+            "total_rub": 3700,
+            "explanation": "Самовывоз · Азов. Стол — 2 000 ₽ (ширина стола 100 см), Кресло — 1 200 ₽ (без регулировки высоты), Лампа — 500 ₽ (температура света 3300 к). Итого 3 700 ₽. Запас бюджета 11 300 ₽."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": "azov",
+        "budget_rub": 15000,
+        "categories": [
+          "table",
+          "chair",
+          "lamp"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "rostov_alias",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Стол в ростове, бюджет 5000 рублей"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": "rostov-na-donu",
+          "budget_rub": 5000,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ],
+        "requested_location": {
+          "name": "ростове",
+          "type": "city",
+          "city_id": "rostov-na-donu"
+        }
+      },
+      "response": {
+        "status": "ok",
+        "options": [
+          {
+            "listing_ids": [
+              "rdTable"
+            ],
+            "total_rub": 1700,
+            "explanation": "Самовывоз · Ростов-на-Дону. Стол — 1 700 ₽ (ширина стола 90 см). Итого 1 700 ₽. Запас бюджета 3 300 ₽."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": "rostov-na-donu",
+        "budget_rub": 5000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    },
+    {
+      "name": "saint_petersburg",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Доставка в Санкт-Петербург"
+        }
+      ],
+      "model_query": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": {
+          "name": "Санкт-Петербург",
+          "type": "city",
+          "city_id": null
+        }
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "city_id",
+            "text": "Такого города нет. Пожалуйста, выберите из имеющихся. Доступны: Таганрог, Ростов-на-Дону, Азов. Вы указали: «Санкт-Петербург»."
+          }
+        ]
+      },
+      "requirements": {
+        "city_id": null,
+        "budget_rub": null,
+        "categories": [],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "passed": true
+    }
+  ]
+}
