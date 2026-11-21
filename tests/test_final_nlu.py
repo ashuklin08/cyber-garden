@@ -14,6 +14,17 @@ class FinalNluTest(unittest.TestCase):
     def setUp(self):
         self.manager = ConversationManager()
 
+    def test_live_unscoped_number_cannot_become_a_model_width(self):
+        messages = dialog("Стол. До 100. Таганрог.")
+        inferred = requirements(budget_rub=None, width_cm=[["lte", 100]])
+        gemma = Mock(return_value=(ModelQuery(inferred, ()), object()))
+        query, _ = self.manager.resolve(messages, gemma, require_model=True)
+        self.assertEqual(query.requirements.width_cm, ())
+        self.assertIsNone(query.requirements.budget_rub)
+        self.assertEqual(query.requirements.categories, ("table",))
+        self.assertIn("width_cm", query.unresolved)
+        self.assertTrue(query.attribute_questions())
+
     def resolve(self, messages, **fields):
         model = Mock(return_value=(ModelQuery(requirements(**fields), ()), object()))
         state, _ = self.manager.resolve(messages, model, require_model=False)

@@ -319,6 +319,21 @@ def parse_turn(message, pending, current):
         # Inverted/compound colloquial amounts are left to Gemma as a whole.
         turn.uncertain.add("budget_rub")
 
+    if (len(active) == 1 and "budget_rub" not in pending
+            and not BUDGET_WORD.search(text) and not SOFT.search(text)):
+        category = next(iter(active))
+        attr = FEATURES[category]
+        if attr in {"width_cm", "color_temperature_k"} and not current.condition(category):
+            for hit in BARE_MEASURE.finditer(text):
+                money = MONEY.match(text, hit.start())
+                if (not any(lo <= hit.start() < hi for lo, hi in spans)
+                        and not (money and money["u"])
+                        and _operator(text[:hit.start()], None) is not None):
+                    # A bare "до 100" supplies neither a verified unit nor an
+                    # attribute. Do not accept Gemma's guessed hard bound.
+                    turn.uncertain.add(attr)
+                    turn.ambiguous_attributes.add(attr)
+
     owner = next(iter(current.categories), None) if len(current.categories) == 1 else None
     for clause in filter(str.strip, SPLIT.split(text)):
         for fragment in re.split(r"\s+и\s+(?=(?:(?:нуж\w*|еще|также)\s+)?(?:"
