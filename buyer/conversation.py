@@ -60,13 +60,33 @@ DOMAIN_QUESTION = ("Я помогаю подбирать товары из ка�
                    "приобрести: например, стол, кресло или лампу.")
 
 
+_THOUSAND_TYPO = re.compile(
+    r"(\b\d+(?:[.,]\d+)?\s+)тисяч(?:а|и|у)?\b"
+    r"(?=\s*(?:$|[.,!?;]|₽|руб\w*\b|за\s+вс[её]\b|в\s+))", re.I)
+_CITY_TYPO = re.compile(
+    r"(?P<prefix>\b(?:в|из|город)\s+|^\s*)(?P<city>азев[еи]?|растов[еа]?)\b"
+    r"(?![-\w]|\s+велик)", re.I)
+_TABLE_TYPO = re.compile(
+    r"(^\s*|\b(?:нужен|ищу|купить|подбери|найди)\s+)столь\b"
+    r"(?=\s*(?:$|[.,!?;]|в\s+|до\s+\d|за\s+\d))", re.I)
+
+
+def _correct_buyer_text(text):
+    # «столь» is also an adverb. Require an item slot with a clear right boundary.
+    text = _TABLE_TYPO.sub(r"\1стол", text)
+    text = _THOUSAND_TYPO.sub(r"\1тысяч", text)
+    return _CITY_TYPO.sub(lambda m: m["prefix"] + (
+        "Азов" if m["city"].lower().startswith("аз") else "Ростов"), text)
+
+
 def active_dialog(messages):
     """A buyer's explicit reset is a boundary for both local replay and Gemma."""
     boundary = 0
     for index, message in enumerate(messages):
         if message["role"] == "user" and RESET_DIALOG.fullmatch(normalize(message["text"])):
             boundary = index
-    return messages[boundary:] if boundary else messages
+    return [dict(message, text=_correct_buyer_text(message["text"]))
+            if message["role"] == "user" else message for message in messages[boundary:]]
 
 
 def _unscoped_price(text):
