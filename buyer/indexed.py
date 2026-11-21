@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from buyer.contracts import CATEGORIES, FEATURES, Comparison, read_catalog
-from buyer.selection import Selection, _explain, matches, select
+from buyer.selection import Selection, _explain, clarification_questions, matches, select
 from buyer.ranking import ALIASES, _soft_condition, listing_scores
 from buyer.query_parser import typed_preference
 
@@ -93,7 +93,9 @@ class SearchProvider:
 
     def _search(self, req, preferences=(), expand=True, cache=None):
         if not req.categories or req.city_id is None or req.budget_rub is None:
-            return Retrieved(select((), req), (), {}, 0)
+            # No catalogue request has run: absence cannot be inferred here.
+            response = {"status": "clarify", "questions": clarification_questions(req)}
+            return Retrieved(Selection(response, {}, None), (), {}, 0)
         buckets = {}
         wishes = {}
         preferences = tuple(typed_preference(pref) for pref in preferences)

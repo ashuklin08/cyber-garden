@@ -42,6 +42,7 @@ class ModelTrace:
 class ModelQuery:
     requirements: Requirements
     preferences: tuple[Preference, ...]
+    intent: str | None = None
 
 
 def configuration():
@@ -208,6 +209,9 @@ def extract(messages, *, full_history=False, use_anchors=True):
             raise ValueError("Incomplete generation")
         extracted = decode_json(choice["message"]["content"])
         soft = extracted.pop("preferences", [])
+        intent = extracted.pop("intent", None)
+        if intent not in (None, "shopping", "off_topic", "ambiguous", "reset"):
+            raise ValueError("Unknown turn intent")
         for field in ("width_cm", "color_temperature_k"):
             value = extracted.get(field)
             if (isinstance(value, list) and len(value) == 2
@@ -218,7 +222,7 @@ def extract(messages, *, full_history=False, use_anchors=True):
         usage = envelope.get("usage", {})
     except (ValueError, TypeError, KeyError, IndexError, AttributeError):
         raise ModelError("Gemma вернула неполный ответ или данные вне схемы условий.") from None
-    return ModelQuery(requirements, preferences), ModelTrace(
+    return ModelQuery(requirements, preferences, intent), ModelTrace(
         model, _tokens(usage, "prompt_tokens"), _tokens(usage, "completion_tokens"),
         round((time.monotonic() - started) * 1000)
     )

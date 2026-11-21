@@ -5,7 +5,8 @@ from dataclasses import dataclass, replace
 
 from buyer.anchors import WORDS, accessory_context, categories_from_dialog
 from buyer.contracts import Requirements, read_requirements
-from buyer.query_parser import ATTRIBUTES, CITIES_RE, CORE, OWNER, Preference, normalize, parse_turn, tighten
+from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
+                                TEMPERATURE, WIDTH, Preference, normalize, parse_turn, tighten)
 from buyer.preferences import category_text, evolve, grounded
 
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
@@ -43,6 +44,39 @@ SAFE_WORDS = re.compile(
 )
 
 
+RESET_DIALOG = re.compile(r"^(?:(?:начни|начать|начнем)\s+)?новый\s+диалог[.!?\s]*$")
+OFF_TOPIC = re.compile(r"\b(?:рецепт\w*|приготов\w*|погод\w*|анекдот\w*|гороскоп\w*|переведи|напиши\s+код)\b")
+SHOPPING_CONTEXT = re.compile(
+    r"\b(?:нуж\w*|хочу|ищу|подбери|подобрать|найди|куп\w*|добавь|убери|оставь|"
+    r"бюджет\w*|город\w*|ширин\w*|регулиров\w*|температур\w*|пожелан\w*|"
+    r"комплект\w*|вариант\w*|как\s+раньше|тот\s+же|все\s+то\s+же|table|desk|chair|armchair|lamp)\b")
+DOMAIN_QUESTION = ("Я помогаю подбирать товары из каталога. Уточните, что вы хотите "
+                   "приобрести: например, стол, кресло или лампу.")
+
+
+def active_dialog(messages):
+    """A buyer's explicit reset is a boundary for both local replay and Gemma."""
+    boundary = 0
+    for index, message in enumerate(messages):
+        if message["role"] == "user" and RESET_DIALOG.fullmatch(normalize(message["text"])):
+            boundary = index
+    return messages[boundary:] if boundary else messages
+
+
+def _unscoped_price(text):
+    if BUDGET_WORD.search(text) or not any(pattern.search(text) for pattern in WORDS.values()):
+        return False
+    spans = [hit.span() for pattern in (WIDTH, TEMPERATURE) for hit in pattern.finditer(text)]
+    for hit in MONEY.finditer(text):
+        if hit["u"] or any(lo <= hit.start() < hi for lo, hi in spans):
+            continue
+        # Comparisons without a unit are handled by attribute ambiguity rules.
+        if re.search(r"\b(?:до|от|ровно|больше|меньше|шире|уже)\s*$", text[:hit.start()]):
+            continue
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class LocalState:
     requirements: Requirements
@@ -52,6 +86,19 @@ class LocalState:
     ambiguous_attributes: frozenset[str]
     needs_model: bool
     blocked_categories: bool = False
+    turn_issue: str | None = None
+
+    def decision_questions(self):
+        if self.turn_issue in {"off_topic", "ambiguous"}:
+            return ({"field": "categories", "text": DOMAIN_QUESTION},)
+        if self.turn_issue in {"price", "chair_price"}:
+            questions = [{"field": "budget_rub", "text":
+                          "Указанное число — цена одного товара или общий бюджет на весь комплект?"}]
+            if self.turn_issue == "chair_price":
+                questions.append({"field": "categories", "text":
+                    "В каталоге поддерживается категория «Кресло». Подойдёт ли вам кресло вместо стула?"})
+            return tuple(questions)
+        return ()
 
     def questions(self):
         values = self.requirements
@@ -112,6 +159,7 @@ class ConversationManager:
     """Stateless replay also works when CLI launches a fresh process per turn."""
 
     def local(self, messages):
+        messages = active_dialog(messages)
         values = EMPTY.copy()
         confirmed = set()
         unresolved = set()
@@ -121,14 +169,34 @@ class ConversationManager:
         needs_model = False
         composition_history = []
         blocked_categories = False
+        turn_issue = None
         for message in messages:
             text = normalize(message["text"])
             if message["role"] == "assistant":
                 pending = _pending(text)
                 continue
 
+            turn_issue = None
+            if RESET_DIALOG.fullmatch(text):
+                confirmed.update(EMPTY)
+                needs_model = True
+                pending = set()
+                continue
             current = read_requirements(values)
             turn = parse_turn(message["text"], pending, current)
+            mentions_product = any(pattern.search(text) for pattern in WORDS.values())
+            shopping_signal = (mentions_product or turn.values or turn.preferences or turn.uncertain
+                               or SHOPPING_CONTEXT.search(text))
+            if (OFF_TOPIC.search(text) and not mentions_product) or not shopping_signal:
+                turn_issue = "off_topic" if OFF_TOPIC.search(text) else "ambiguous"
+                needs_model = True
+                pending = set()
+                continue
+            if _unscoped_price(text):
+                turn_issue = "chair_price" if re.search(r"\bстул\w*\b", text) else "price"
+                turn.values.pop("budget_rub", None)
+                turn.uncertain.discard("budget_rub")
+                needs_model = True
             composition = category_text(text)
             composition_history.append({"role": "user", "text": composition})
             anchor = categories_from_dialog(composition_history)
@@ -191,9 +259,28 @@ class ConversationManager:
         requirements = read_requirements(values)
         return LocalState(requirements, _filter_preferences(preferences, requirements.categories),
                           frozenset(confirmed), frozenset(unresolved),
-                          frozenset(ambiguous_attributes), needs_model, blocked_categories)
+                          frozenset(ambiguous_attributes), needs_model, blocked_categories, turn_issue)
 
     def merge(self, local, model, messages=()):
+        if local.turn_issue:
+            # Ground preserved model-only wishes in earlier buyer turns, never
+            # in the unrelated/ambiguous current text or assistant suggestions.
+            history = messages[:-2] if len(messages) > 1 else []
+            previous_texts = [normalize(message["text"]) for message in history if message["role"] == "user"]
+            budget_evidence = any(re.search(r"\bтыс(?:яч\w*)?\b", text)
+                or any(hit["u"] for hit in MONEY.finditer(text))
+                or (BUDGET_WORD.search(text) and MONEY.search(text)) for text in previous_texts)
+            requirements, unresolved = local.requirements, local.unresolved
+            if ("budget_rub" in unresolved and budget_evidence
+                    and local.turn_issue not in {"price", "chair_price"}
+                    and model.requirements.budget_rub is not None):
+                requirements = replace(requirements, budget_rub=model.requirements.budget_rub)
+                unresolved = unresolved - {"budget_rub"}
+            preferences = grounded((*local.preferences, *model.preferences), history)
+            preferences = tuple(pref for pref in local.preferences if pref.category is None) + preferences
+            issue = "off_topic" if model.intent == "off_topic" and local.turn_issue == "ambiguous" else local.turn_issue
+            return replace(local, requirements=requirements, unresolved=unresolved, turn_issue=issue,
+                           preferences=_filter_preferences(preferences, requirements.categories))
         fields = {field: getattr(local.requirements, field)
                   for field in local.confirmed | local.ambiguous_attributes}
         requirements = replace(model.requirements, **fields)
@@ -207,8 +294,21 @@ class ConversationManager:
         ))
 
     def resolve(self, messages, gemma, *, require_model):
+        messages = active_dialog(messages)
         local = self.local(messages)
         if not require_model and not local.needs_model:
             return local, None
         model, trace = gemma(messages, full_history=local.needs_model)
+        if model.intent in {"off_topic", "ambiguous"} and not local.turn_issue:
+            previous_messages = messages[:-2] if len(messages) > 1 else []
+            previous = self.local(previous_messages)
+            last = messages[-1]["text"]
+            turn = parse_turn(last, set(), previous.requirements)
+            explicit = turn.values or turn.preferences or any(pattern.search(last) for pattern in WORDS.values())
+            if not explicit:
+                # Semantic classification covers topics outside the small local
+                # guard vocabulary. Neither intent nor a guessed category can
+                # erase previously confirmed purchase facts.
+                preserved = replace(previous, turn_issue=model.intent, needs_model=True)
+                return self.merge(preserved, model, messages), trace
         return self.merge(local, model, messages), trace

@@ -65,6 +65,9 @@ def category_text(text):
 def evolve(previous, incoming, text):
     text = normalize(text)
     previous = () if RESET.search(text) else previous
+    if re.search(r"\bотмен\w*\s+предыдущ\w*\s+пожелани\w*\b", text):
+        previous = previous[:-1]
+        incoming = ()
     new = tuple(typed_preference(pref) for pref in incoming if isinstance(pref.text, str)
                 and 0 < len(pref.text.strip()) <= 120 and not rejected(typed_preference(pref), text))
     previous = tuple(pref for pref in previous if not rejected(pref, text))

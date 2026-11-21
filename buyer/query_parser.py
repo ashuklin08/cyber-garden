@@ -121,6 +121,7 @@ class BudgetReading:
 
 def normalize(text):
     text = unicodedata.normalize("NFKC", text).lower().replace("ё", "е")
+    text = re.sub(r"\bневажно\b", "не важно", text)
     return re.sub(r"[^\S\n]+", " ", text).strip()
 
 
@@ -334,6 +335,9 @@ def parse_turn(message, pending, current):
                     turn.uncertain.add(attr)
                     turn.ambiguous_attributes.add(attr)
 
+    for attr, words in FEATURE_WORDS.items():
+        if re.search(rf"\b{CLEAR}[ ,]*(?:(?:какая|какой|какое)\s+)?(?:{words})\b", text):
+            turn.values[attr] = None if attr == "adjustable_height" else []
     owner = next(iter(current.categories), None) if len(current.categories) == 1 else None
     for clause in filter(str.strip, SPLIT.split(text)):
         for fragment in re.split(r"\s+и\s+(?=(?:(?:нуж\w*|еще|также)\s+)?(?:"

@@ -13,6 +13,7 @@ const send = byId("send");
 const errorBox = byId("error");
 const history = [];
 let busy = false;
+let lastOkFingerprint = null;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -123,18 +124,26 @@ function renderResults(data) {
     response.options.forEach((option, index) => grid.append(buildOption(option, index, data)));
     results.append(bar, grid);
   }
+  if (response.status === "no_match") {
+    results.append(element("h2", null, "Подходящих комплектов нет"),
+      element("p", null, response.message));
+  } else if (response.status === "clarify") {
+    results.append(element("p", null, response.questions.map(question => question.text).join("\n")));
+  }
   results.append(jsonDetails(response));
 }
 
-function assistantReply(response) {
+function assistantReply(response, unchanged = false) {
   if (response.status === "clarify") return response.questions.map((question) => question.text).join("\n");
   if (response.status === "no_match") return response.message;
+  if (unchanged) return "Подходящие варианты не изменились: подтверждённые условия и результат совпадают с предыдущим подбором.";
   return "Подобрал комплект с самовывозом. Самый доступный вариант — " +
     money(response.options[0].total_rub) + ". Можно сравнить позиции ниже.";
 }
 
 async function submit(text) {
   if (busy || !text.trim()) return;
+  if (/^(?:(?:начни|начать|начнем)\s+)?новый\s+диалог[.!?\s]*$/i.test(text.trim())) resetDialogue();
   if (history.length >= 18) {
     errorBox.textContent = "Достигнут лимит диалога. Начните новый диалог.";
     errorBox.hidden = false;
@@ -147,6 +156,8 @@ async function submit(text) {
   reset.disabled = true;
   send.textContent = "Проверяем…";
   starter.hidden = true;
+  results.replaceChildren();
+  results.hidden = true;
   const user = bubble("user", turn.text);
   const waiting = bubble("assistant", "Извлекаю условия и проверяю каталог…");
   waiting.classList.add("waiting");
@@ -155,7 +166,14 @@ async function submit(text) {
   try {
     const data = await post("/api/buy", {messages: [...history, turn]});
     const clarification = data.clarification?.length > 0;
-    const reply = clarification ? data.clarification.join("\n") : assistantReply(data.response);
+    const fingerprint = data.response?.status === "ok" ? JSON.stringify({
+      options: data.response.options.map(({listing_ids, total_rub}) => ({listing_ids, total_rub})),
+      requirements: data.requirements, preferences: data.preferences,
+    }) : null;
+    const reply = clarification ? data.clarification.join("\n")
+      : assistantReply(data.response, fingerprint !== null && fingerprint === lastOkFingerprint);
+    if (fingerprint !== null) lastOkFingerprint = fingerprint;
+    else if (data.response?.status === "no_match") lastOkFingerprint = null;
     history.push(turn, {role: "assistant", text: reply});
     query.value = "";
     waiting.replaceWith(bubble("assistant", reply));
@@ -199,8 +217,9 @@ byId("prompts").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-prompt]");
   if (button) submit(button.dataset.prompt);
 });
-reset.addEventListener("click", () => {
+function resetDialogue() {
   history.length = 0;
+  lastOkFingerprint = null;
   messages.replaceChildren(starter);
   starter.hidden = false;
   reset.hidden = true;
@@ -211,7 +230,8 @@ reset.addEventListener("click", () => {
   send.textContent = "Подобрать";
   query.value = "";
   query.focus();
-});
+}
+reset.addEventListener("click", resetDialogue);
 
 const buyerTab = byId("buyer-tab");
 const labTab = byId("lab-tab");

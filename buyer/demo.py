@@ -14,7 +14,7 @@ from buyer.conversation import ConversationManager
 from buyer.indexed import SearchError, SearchProvider
 from buyer.lab import QUERY, compare
 from buyer.model import ModelError, ModelTrace, extract
-from buyer.selection import LABELS, actual_feature, describe_condition, select
+from buyer.selection import LABELS, Selection, actual_feature, describe_condition, select
 
 UI = Path(__file__).with_name("ui")
 ASSETS = {
@@ -145,7 +145,10 @@ class Handler(BaseHTTPRequestHandler):
         requirements = query.requirements
         clarification = query.attribute_questions() if not query.questions() else ()
         listings, titles = self.server.listings, self.server.titles
-        if clarification:
+        if query.decision_questions():
+            clarification = ()
+            result = Selection({"status": "clarify", "questions": list(query.decision_questions())}, {}, None)
+        elif clarification:
             result = None
         elif self.server.provider:
             found = self.server.provider.search(requirements, query.preferences)

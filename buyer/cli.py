@@ -26,7 +26,9 @@ def main():
         listings = read_catalog(decode_json(args.catalog.read_bytes()))
         query, _ = ConversationManager().resolve(request, extract, require_model=True)
         attribute_questions = query.attribute_questions() if not query.questions() else ()
-        if attribute_questions:
+        if query.decision_questions():
+            response = {"status": "clarify", "questions": list(query.decision_questions())}
+        elif attribute_questions:
             # The official schema has no attribute-specific question fields.
             # Keep the supported categories and ask about their requirements
             # using the permitted composition field, rather than ignoring a bound.

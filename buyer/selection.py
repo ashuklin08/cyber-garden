@@ -97,14 +97,15 @@ def _explain(items, total, requirements):
             + f". Итого {rubles(total)}. {budget_note}")
 
 
-def _no_candidates(by_category, unavailable, requirements):
+def _no_candidates(by_category, unavailable, requirements, catalog_categories=None):
     city = CITIES[requirements.city_id]
     reasons = []
     for category in unavailable:
         items = by_category[category]
         name = CATEGORIES[category]
         if not items:
-            reasons.append(f"«{name}» отсутствует в каталоге этого города")
+            scope = "каталоге" if catalog_categories is not None and category not in catalog_categories else "каталоге этого города"
+            reasons.append(f"«{name}» отсутствует в {scope}")
             continue
         condition = requirements.condition(category)
         label = LABELS[category].lower()
@@ -144,13 +145,19 @@ def filter_listings(listings, requirements):
     return by_category, eligible
 
 
-def select(listings, requirements, preferences=()):
-    questions = [
+def clarification_questions(requirements):
+    return [
         {"field": field, "text": question}
         for field, question in QUESTIONS.items()
         if getattr(requirements, field) is None or (field == "categories" and not requirements.categories)
     ]
-    if questions:
+
+
+def select(listings, requirements, preferences=()):
+    questions = clarification_questions(requirements)
+    # A known city and composition suffice to prove an empty hard-filtered
+    # category even before the total budget has been supplied.
+    if any(question["field"] != "budget_rub" for question in questions):
         return Selection({"status": "clarify", "questions": questions}, {}, None)
 
     by_category, eligible = filter_listings(listings, requirements)
@@ -158,7 +165,10 @@ def select(listings, requirements, preferences=()):
     unavailable = [key for key, count in counts.items() if count == 0]
     if unavailable:
         return Selection({"status": "no_match",
-                          "message": _no_candidates(by_category, unavailable, requirements)}, counts, None)
+                          "message": _no_candidates(by_category, unavailable, requirements,
+                                                    {item.category for item in listings})}, counts, None)
+    if questions:
+        return Selection({"status": "clarify", "questions": questions}, counts, None)
 
     groups = tuple(eligible.values())
     minimum = sum(group[0].price_rub for group in groups)
