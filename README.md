@@ -88,6 +88,15 @@ python3 -m tests.check_lifecycle --repeats 2
 python3 -m bench.local_cli --repeats 30 --output bench/results/local-cli.json
 ```
 
+Web API записывает только числовую диагностику этапов в stderr и HTTP-заголовок
+`Server-Timing`: `gemma_ms`, `resolve_ms`, `search_ms`, `total_ms`. Время Gemma
+входит в `resolve_ms`, поэтому эти два значения не суммируются. Поиск измеряется
+отдельно после NLU. Тексты сообщений и заголовки авторизации в диагностику не
+попадают; JSON CLI остаётся прежним. Реальный замер 15 сценариев (включая два на
+`data/catalog.json`): `python3 -m bench.stage_latency --output bench/results/new-stage-run.json`.
+Выбирайте новый путь отчёта при каждом запуске. Это диагностика, без изменения
+алгоритмов поиска, retry или timeout.
+
 Функциональные проверки frontend без дополнительных зависимостей: `node tests/ui_dialogue.cjs`.
 
 `check_lifecycle` повторяет весь набор в одном процессе и проверяет закрытие

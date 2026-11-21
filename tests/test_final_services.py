@@ -77,6 +77,7 @@ class DemoModelTest(unittest.TestCase):
         try:
             connection.request("POST", "/api/buy", body=body, headers={"Content-Type": "application/json"})
             response = connection.getresponse()
+            self.last_headers = dict(response.getheaders())
             return response.status, json.loads(response.read())
         finally:
             connection.close()
@@ -104,6 +105,35 @@ class DemoModelTest(unittest.TestCase):
             self.mock.assert_not_called()
         finally:
             self.server.gateway_slot.release()
+
+
+    def test_busy_response_has_zero_gemma_and_search_timings(self):
+        self.server.gateway_slot.acquire()
+        try:
+            status, body = self.buy()
+        finally:
+            self.server.gateway_slot.release()
+        self.assertEqual(status, 429)
+        self.assertIn("error", body)
+        timings = {p.strip().split(";dur=")[0]: float(p.split(";dur=")[1])
+                   for p in self.last_headers["Server-Timing"].split(",")}
+        self.assertEqual(timings["gemma"], 0)
+        self.assertEqual(timings["search"], 0)
+        self.assertGreaterEqual(timings["total"], timings["resolve"])
+        self.mock.assert_not_called()
+
+    def test_model_error_has_timings_without_search_or_no_match(self):
+        self.mock.side_effect = ModelError("offline model error")
+        status, body = self.buy()
+        self.assertEqual(status, 502)
+        self.assertIn("error", body)
+        self.assertNotIn("response", body)
+        timings = {p.strip().split(";dur=")[0]: float(p.split(";dur=")[1])
+                   for p in self.last_headers["Server-Timing"].split(",")}
+        self.assertEqual(timings["search"], 0)
+        self.assertGreaterEqual(timings["resolve"] + .001, timings["gemma"])
+        self.assertGreaterEqual(timings["total"], timings["resolve"])
+        self.mock.assert_called_once()
 
 
 class GatewayDeadlineTest(unittest.TestCase):

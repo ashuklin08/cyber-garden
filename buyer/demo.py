@@ -3,6 +3,8 @@
 import argparse
 import json
 import socket
+import sys
+import time
 from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -48,6 +50,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(raw)))
+        stages = getattr(self, "_stages", None)
+        if stages is not None:
+            stages["total_ms"] = (time.perf_counter() - self._request_started) * 1000
+            measured = {key: round(value, 3) for key, value in stages.items()}
+            self.send_header("Server-Timing", ", ".join(
+                key.removesuffix("_ms") + ";dur=" + str(value) for key, value in measured.items()))
+            # Deliberately exclude request text, headers, URLs and credentials.
+            sys.stderr.write(json.dumps({"event": "buyer_stage_latency", "status": int(status), **measured}) + "\n")
+            sys.stderr.flush()
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", CSP)
         self.send_header("Cache-Control", "no-store")
@@ -87,6 +98,8 @@ class Handler(BaseHTTPRequestHandler):
         return decode_json(self.rfile.read(size))
 
     def do_POST(self):
+        self._request_started = time.perf_counter()
+        self._stages = dict(gemma_ms=0.0, resolve_ms=0.0, search_ms=0.0, total_ms=0.0) if self.path == "/api/buy" else None
         if not self._local_host():
             self._json(HTTPStatus.FORBIDDEN, {"error": "Демо доступно через localhost."})
             return
@@ -106,9 +119,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
-            query, trace = ConversationManager().resolve(
-                messages, self._gemma, require_model=True
-            )
+            resolve_started = time.perf_counter()
+            try:
+                query, trace = ConversationManager().resolve(
+                    messages, self._gemma, require_model=True
+                )
+            finally:
+                if self._stages is not None:
+                    self._stages["resolve_ms"] = (time.perf_counter() - resolve_started) * 1000
         except GatewayBusy:
             self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Gemma уже обрабатывает запрос. Повторите чуть позже."})
             return
@@ -136,9 +154,14 @@ class Handler(BaseHTTPRequestHandler):
     def _gemma(self, messages, *, full_history):
         if not self.server.gateway_slot.acquire(blocking=False):
             raise GatewayBusy
+        started = time.perf_counter()
         try:
             return extract(messages, full_history=full_history)
         finally:
+            if self._stages is not None:
+                # One high-resolution clock for all nested Web stages. The
+                # existing client trace uses monotonic and stays unchanged.
+                self._stages["gemma_ms"] = (time.perf_counter() - started) * 1000
             self.server.gateway_slot.release()
 
     def _buyer_result(self, query, trace):
@@ -150,11 +173,17 @@ class Handler(BaseHTTPRequestHandler):
             result = Selection({"status": "clarify", "questions": list(query.decision_questions())}, {}, None)
         elif clarification:
             result = None
-        elif self.server.provider:
-            found = self.server.provider.search(requirements, query.preferences)
-            result, listings, titles = found.selection, found.listings, found.titles
         else:
-            result = select(listings, requirements, query.preferences)
+            search_started = time.perf_counter()
+            try:
+                if self.server.provider:
+                    found = self.server.provider.search(requirements, query.preferences)
+                    result, listings, titles = found.selection, found.listings, found.titles
+                else:
+                    result = select(listings, requirements, query.preferences)
+            finally:
+                if self._stages is not None:
+                    self._stages["search_ms"] = (time.perf_counter() - search_started) * 1000
         items = {
             listing_id for option in (result.response.get("options", []) if result else [])
             for listing_id in option["listing_ids"]

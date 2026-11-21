@@ -109,6 +109,10 @@ function jsonDetails(response) {
   return details;
 }
 
+function singleItemResult(response) {
+  return response.options.length > 0 && response.options.every(option => option.listing_ids.length === 1);
+}
+
 function renderResults(data) {
   const response = data.response;
   results.replaceChildren();
@@ -117,8 +121,10 @@ function renderResults(data) {
     const bar = element("div", "result-heading");
     const title = element("div");
     const count = response.options.length;
-    title.append(element("h2", null, "Подходящие комплекты"),
-      element("p", null, count === 1 ? "Найден 1 вариант" : "Найдено " + count + " варианта"));
+    const single = singleItemResult(response);
+    title.append(element("h2", null, single ? "Подходящие товары" : "Подходящие комплекты"),
+      element("p", null, single ? (count === 1 ? "Найдено 1 объявление" : "Найдено " + count + " объявления")
+        : (count === 1 ? "Найден 1 комплект" : "Найдено " + count + " комплекта")));
     bar.append(title, element("span", "pill", "Проверено по каталогу"));
     const grid = element("div", "option-grid");
     response.options.forEach((option, index) => grid.append(buildOption(option, index, data)));
@@ -136,8 +142,11 @@ function renderResults(data) {
 function assistantReply(response, unchanged = false) {
   if (response.status === "clarify") return response.questions.map((question) => question.text).join("\n");
   if (response.status === "no_match") return response.message;
-  if (unchanged) return "Подходящие варианты не изменились: подтверждённые условия и результат совпадают с предыдущим подбором.";
-  return "Подобрал комплект с самовывозом. Самый доступный вариант — " +
+  const single = singleItemResult(response);
+  if (unchanged) return "Подходящие " + (single ? "товары" : "комплекты") +
+    " не изменились: подтверждённые условия и результат совпадают с предыдущим подбором.";
+  return (single ? "Нашёл подходящие объявления. Самый доступный вариант — "
+    : "Подобрал комплект с самовывозом. Самый доступный вариант — ") +
     money(response.options[0].total_rub) + ". Можно сравнить позиции ниже.";
 }
 

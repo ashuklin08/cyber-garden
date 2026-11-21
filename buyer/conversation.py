@@ -12,6 +12,7 @@ from buyer.preferences import category_text, evolve, grounded
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
              adjustable_height=None, color_temperature_k=[])
 MISSING_CATEGORY = "В запросе есть товар вне каталога"
+UNSUPPORTED_NAMES = {"холодильник": "Холодильники", "диван": "Диваны", "шкаф": "Шкафы"}
 LIMIT_OPERATIONS = {"gte": "lower", "gt": "lower", "lte": "upper", "lt": "upper", "eq": "equal"}
 QUESTIONS = {
     "city_id": r"город\w*|самовывоз\w*",
@@ -45,11 +46,13 @@ SAFE_WORDS = re.compile(
 
 
 RESET_DIALOG = re.compile(r"^(?:(?:начни|начать|начнем)\s+)?новый\s+диалог[.!?\s]*$")
-OFF_TOPIC = re.compile(r"\b(?:рецепт\w*|приготов\w*|погод\w*|анекдот\w*|гороскоп\w*|переведи|напиши\s+код)\b")
+OFF_TOPIC = re.compile(r"\b(?:рецепт\w*|приготов\w*|погод\w*|анекдот\w*|гороскоп\w*|теорем\w*|пифагор\w*|переведи|напиши\s+код)\b")
 SHOPPING_CONTEXT = re.compile(
     r"\b(?:нуж\w*|хочу|ищу|подбери|подобрать|найди|куп\w*|добавь|убери|оставь|"
     r"бюджет\w*|город\w*|ширин\w*|регулиров\w*|температур\w*|пожелан\w*|"
     r"комплект\w*|вариант\w*|как\s+раньше|тот\s+же|все\s+то\s+же|table|desk|chair|armchair|lamp)\b")
+OFF_TOPIC_QUESTION = ("Я специализируюсь на подборе товаров из каталога и не отвечаю на вопросы "
+                      "по другим темам. Могу помочь выбрать стол, кресло или лампу. Что вас интересует?")
 DOMAIN_QUESTION = ("Я помогаю подбирать товары из каталога. Уточните, что вы хотите "
                    "приобрести: например, стол, кресло или лампу.")
 
@@ -87,10 +90,24 @@ class LocalState:
     needs_model: bool
     blocked_categories: bool = False
     turn_issue: str | None = None
+    unsupported_items: tuple[str, ...] = ()
 
     def decision_questions(self):
-        if self.turn_issue in {"off_topic", "ambiguous"}:
+        if self.turn_issue == "off_topic":
+            return ({"field": "categories", "text": OFF_TOPIC_QUESTION},)
+        if self.turn_issue == "ambiguous":
             return ({"field": "categories", "text": DOMAIN_QUESTION},)
+        if self.blocked_categories:
+            # Labels come only from reviewed local names, never an invented
+            # model label or an arbitrary word from a buyer message.
+            from buyer.selection import clarification_questions
+            names = [UNSUPPORTED_NAMES[item] for item in self.unsupported_items if item in UNSUPPORTED_NAMES]
+            text = ("К сожалению, в текущем каталоге нет " + ("категории" if len(names) == 1 else "категорий") + " «" + "», «".join(names)
+                    + "». Сейчас доступны столы, кресла и лампы. Может быть, вас интересует что-то из них?"
+                    if names else "Сейчас подбор поддерживает столы, кресла и лампы. Уточните, какие товары вам нужны.")
+            questions = clarification_questions(self.requirements)
+            return tuple(dict(question, text=text) if question["field"] == "categories" else question
+                         for question in questions)
         if self.turn_issue in {"price", "chair_price"}:
             questions = [{"field": "budget_rub", "text":
                           "Указанное число — цена одного товара или общий бюджет на весь комплект?"}]
@@ -169,6 +186,7 @@ class ConversationManager:
         needs_model = False
         composition_history = []
         blocked_categories = False
+        unsupported_items = ()
         turn_issue = None
         for message in messages:
             text = normalize(message["text"])
@@ -204,6 +222,7 @@ class ConversationManager:
             mentions = any(pattern.search(composition) for pattern in WORDS.values())
             was_blocked = blocked_categories
             blocked_categories = bool(anchor.pending_unknown)
+            unsupported_items = anchor.pending_unknown
             if blocked_categories:
                 # Retain the known part for replay, but never confirm a partial set.
                 values["categories"] = list(anchor.supported)
@@ -259,7 +278,7 @@ class ConversationManager:
         requirements = read_requirements(values)
         return LocalState(requirements, _filter_preferences(preferences, requirements.categories),
                           frozenset(confirmed), frozenset(unresolved),
-                          frozenset(ambiguous_attributes), needs_model, blocked_categories, turn_issue)
+                          frozenset(ambiguous_attributes), needs_model, blocked_categories, turn_issue, unsupported_items)
 
     def merge(self, local, model, messages=()):
         if local.turn_issue:

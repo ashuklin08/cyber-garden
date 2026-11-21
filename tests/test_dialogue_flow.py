@@ -1,5 +1,8 @@
 """Regression chains through resolve, actual CLI and actual Web API."""
 import json
+import io
+import sys
+import time
 import os
 from pathlib import Path
 import subprocess
@@ -35,6 +38,7 @@ class DialogueFlowTest(unittest.TestCase):
         self.path.write_text(json.dumps(ROWS), encoding="utf-8")
         self.reply = FACTS | {"preferences": []}
         self.calls = []
+        self.gateway_delay = 0
         owner = self
 
         class Gateway(BaseHTTPRequestHandler):
@@ -42,6 +46,7 @@ class DialogueFlowTest(unittest.TestCase):
                 owner.calls.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
                 raw = json.dumps({"model": "offline-gemma", "choices": [{"finish_reason": "stop",
                     "message": {"role": "assistant", "content": json.dumps(owner.reply)}}]}).encode()
+                time.sleep(owner.gateway_delay)
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
@@ -70,7 +75,7 @@ class DialogueFlowTest(unittest.TestCase):
 
     def resolve(self, messages):
         fields = {k: v for k, v in self.reply.items() if k not in {"preferences", "intent"}}
-        gemma = Mock(return_value=(ModelQuery(read_requirements(fields), ()), ModelTrace("offline", 1, 1, 1)))
+        gemma = Mock(return_value=(ModelQuery(read_requirements(fields), (), self.reply.get("intent")), ModelTrace("offline", 1, 1, 1)))
         state, _ = ConversationManager().resolve(messages, gemma, require_model=True)
         gemma.assert_called_once()
         return state
@@ -81,6 +86,7 @@ class DialogueFlowTest(unittest.TestCase):
             connection.request("POST", "/api/buy", json.dumps({"messages": messages}).encode(),
                                {"Content-Type": "application/json"})
             response = connection.getresponse()
+            self.last_headers = dict(response.getheaders())
             body = json.loads(response.read())
             self.assertEqual(response.status, 200, body)
             if body["response"] is not None:
@@ -273,3 +279,71 @@ class DialogueFlowTest(unittest.TestCase):
             self.assertNotIn("response", body)
         finally:
             c.close()
+
+    def test_polish_off_topic_wording_preserves_context(self):
+        for text in ("Скажи рецепт блинчиков", "Посчитай теорему Пифагора", "Расскажи анекдот", "Какая сегодня погода?"):
+            with self.subTest(text=text):
+                self.reply["intent"] = "off_topic"
+                messages = dialog(BASE, "Подобрал комплект.", text)
+                self.assertEqual(self.resolve(messages).requirements, read_requirements(FACTS))
+                body = self.post(messages)
+                self.assertEqual(body["response"]["status"], "clarify")
+                wording = " ".join(q["text"] for q in body["response"]["questions"])
+                self.assertIn("не отвечаю на вопросы по другим темам", wording)
+                self.assertNotIn("options", body["response"])
+                self.assertEqual(body["items"], {})
+
+    def test_polish_unsupported_goods_have_safe_specific_wording(self):
+        for text, name, removal in (("Найди холодильник", "Холодильники", "Холодильник больше не нужен"),
+                                    ("Нужен диван", "Диваны", "Диван больше не нужен"),
+                                    ("Хочу купить шкаф", "Шкафы", "Шкаф больше не нужен")):
+            with self.subTest(text=text):
+                messages = dialog(BASE, "Подобрал комплект.", text)
+                self.reply["intent"] = "shopping"
+                body = self.post(messages)
+                self.assertEqual(body["response"]["status"], "clarify")
+                wording = " ".join(q["text"] for q in body["response"]["questions"])
+                self.assertIn(name, wording)
+                self.assertIn("нет категории", wording)
+                self.assertEqual(body["items"], {})
+                restored = self.resolve(messages + [{"role": "assistant", "text": wording},
+                                                    {"role": "user", "text": removal}])
+                self.assertEqual(restored.requirements, read_requirements(FACTS))
+
+    def test_polish_unrecognized_word_does_not_invent_a_product_name(self):
+        body = self.post(dialog(BASE, "Подобрал комплект.", "Найди абракадабру"))
+        self.assertEqual(body["response"]["status"], "clarify")
+        self.assertNotIn("абракадабр", json.dumps(body["response"], ensure_ascii=False).lower())
+        self.assertEqual(body["items"], {})
+
+    def test_polish_supported_absent_lamp_still_no_match(self):
+        self.web.listings = tuple(item for item in self.web.listings if item.category != "lamp")
+        self.reply = FACTS | {"categories": ["lamp"], "budget_rub": None, "width_cm": [], "preferences": []}
+        body = self.post(dialog("Нужна лампа в Таганроге"))
+        self.assertEqual(body["response"]["status"], "no_match")
+        self.assertNotIn("нет категории", body["response"]["message"])
+
+    def test_stage_timings_exclude_gemma_from_search_and_log_no_input(self):
+        self.gateway_delay = .08
+        original_select = demo.select
+        def delayed_select(*args, **kwargs):
+            time.sleep(.015)
+            return original_select(*args, **kwargs)
+        logs = io.StringIO()
+        marker = "private-user-utterance-marker"
+        with patch.object(demo, "select", side_effect=delayed_select), patch.object(sys, "stderr", logs):
+            body = self.post(dialog(BASE + " " + marker))
+        self.assertEqual(body["response"]["status"], "ok")
+        header = self.last_headers["Server-Timing"]
+        timings = {part.strip().split(";dur=")[0] + "_ms": float(part.split(";dur=")[1])
+                   for part in header.split(",")}
+        self.assertGreaterEqual(timings["gemma_ms"], 60)
+        self.assertGreaterEqual(timings["search_ms"], 10)
+        self.assertLess(timings["search_ms"], timings["gemma_ms"])
+        self.assertGreaterEqual(timings["resolve_ms"] + 1, timings["gemma_ms"])
+        self.assertGreaterEqual(timings["total_ms"] + 1, timings["resolve_ms"] + timings["search_ms"])
+        entries = [json.loads(line) for line in logs.getvalue().splitlines() if line.startswith('{')]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(set(entries[0]), {"event", "status", "gemma_ms", "resolve_ms", "search_ms", "total_ms"})
+        for private in (marker, "Authorization", "offline-dialogue-key"):
+            self.assertNotIn(private, logs.getvalue())
