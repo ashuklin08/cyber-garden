@@ -56,8 +56,10 @@ SHOPPING_CONTEXT = re.compile(
     r"комплект\w*|вариант\w*|как\s+раньше|тот\s+же|все\s+то\s+же|table|desk|chair|armchair|lamp)\b")
 OFF_TOPIC_QUESTION = ("Я специализируюсь на подборе товаров из каталога и не отвечаю на вопросы "
                       "по другим темам. Могу помочь выбрать стол, кресло или лампу. Что вас интересует?")
-DOMAIN_QUESTION = ("Я помогаю подбирать товары из каталога. Уточните, что вы хотите "
-                   "приобрести: например, стол, кресло или лампу.")
+DOMAIN_QUESTION = ("Не удалось понять запрос. Пожалуйста, напишите отдельно, какой товар "
+                   "вам нужен, город самовывоза и максимальный бюджет.")
+CHANGE_QUESTION = ("Не удалось понять, что нужно изменить. Пожалуйста, перепишите это "
+                   "условие другими словами.")
 
 
 _THOUSAND_TYPO = re.compile(
@@ -136,7 +138,14 @@ class LocalState:
         if self.turn_issue == "off_topic":
             return ({"field": "categories", "text": OFF_TOPIC_QUESTION},)
         if self.turn_issue == "ambiguous":
-            return ({"field": "categories", "text": DOMAIN_QUESTION},)
+            missing = self.questions()
+            if set(missing) == set(CORE):
+                return ({"field": "categories", "text": DOMAIN_QUESTION},)
+            if missing:
+                from buyer.selection import QUESTIONS as CLARIFICATION_TEXT
+                return tuple({"field": field, "text": CLARIFICATION_TEXT[field]}
+                             for field in missing)
+            return ({"field": "categories", "text": CHANGE_QUESTION},)
         if self.turn_issue in {"price", "chair_price"}:
             questions = [{"field": "budget_rub", "text":
                           "Указанное число — цена одного товара или общий бюджет на весь комплект?"}]

@@ -1,6 +1,9 @@
 import unittest
 
 from buyer.conversation import ConversationManager, active_dialog
+from buyer.model import ModelQuery, ModelTrace
+from buyer.selection import clarification_questions
+from buyer.contracts import read_requirements
 
 
 class BuyerTypoTest(unittest.TestCase):
@@ -21,3 +24,22 @@ class BuyerTypoTest(unittest.TestCase):
                      "В Растове Великом", "2 тисяча деталей", "В растворе"):
             history = [{"role": "user", "text": text}]
             self.assertEqual(active_dialog(history), history)
+
+    def test_unclear_request_and_only_missing_budget(self):
+        manager = ConversationManager()
+        unclear = manager.local([{"role": "user", "text": "какая-то штука где-то недорого"}])
+        self.assertEqual(unclear.decision_questions(), ({"field": "categories", "text":
+            "Не удалось понять запрос. Пожалуйста, напишите отдельно, какой товар вам нужен, "
+            "город самовывоза и максимальный бюджет."},))
+
+        messages = [{"role": "user", "text": "Стол в Азове, бюджет примерно вот столько"}]
+        requirements = read_requirements({"city_id": "azov", "budget_rub": None,
+            "categories": ["table"], "width_cm": [], "adjustable_height": None,
+            "color_temperature_k": []})
+        query, _ = manager.resolve(messages, lambda *_args, **_kwargs: (
+            ModelQuery(requirements, (), "ambiguous"), ModelTrace("test", 0, 0, 0)),
+            require_model=True)
+        self.assertFalse(query.decision_questions())
+        questions = clarification_questions(query.requirements)
+        self.assertEqual([question["field"] for question in questions], ["budget_rub"])
+        self.assertIn("максимальную сумму", questions[0]["text"])
