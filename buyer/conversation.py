@@ -71,11 +71,58 @@ _CITY_TYPO = re.compile(
 _TABLE_TYPO = re.compile(
     r"(^\s*|\b(?:нужен|ищу|купить|подбери|найди)\s+)столь\b"
     r"(?=\s*(?:$|[.,!?;]|в\s+|до\s+\d|за\s+\d))", re.I)
+_PRODUCT_TYPO = re.compile(
+    r"(?P<prefix>\b(?:нужен|нужна|нужно|хочу|ищу|купить|подбери|найди|покажи|добавь)\s+)"
+    r"(?P<word>[а-яё]{3,9})\b", re.I)
+_INITIAL_PRODUCT_TYPO = re.compile(
+    r"(?P<prefix>^\s*)(?P<word>[а-яё]{3,9})\b"
+    r"(?=\s*(?:$|[.,!?;]|в\s+|до\s+|за\s+|бюджет\b|не\s+(?:шире|дороже)))", re.I)
+_PRODUCT_FORMS = {
+    "table": ("стол", "стола", "столу", "столом", "столе", "столы"),
+    "chair": ("кресло", "кресла", "креслу", "креслом", "кресле", "кресла"),
+    "lamp": ("лампа", "лампу", "лампы", "лампе", "лампой"),
+}
+# These are ordinary words or unsupported products one edit away from a category.
+_PRODUCT_LOOKALIKES = {
+    "столь", "сток", "столб", "рампа", "рампу", "рампы", "рампе",
+    "лапа", "лапу", "лапой", "лама", "ламу", "ламы",
+}
+
+
+def _one_typo(left, right):
+    """Accept one insertion, deletion, substitution or adjacent transposition."""
+    if left == right or abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) == len(right):
+        differences = [index for index, pair in enumerate(zip(left, right)) if pair[0] != pair[1]]
+        return len(differences) == 1 or (len(differences) == 2
+            and differences[1] == differences[0] + 1
+            and left[differences[0]] == right[differences[1]]
+            and left[differences[1]] == right[differences[0]])
+    shorter, longer = (left, right) if len(left) < len(right) else (right, left)
+    for index in range(len(longer)):
+        if longer[:index] + longer[index + 1:] == shorter:
+            return True
+    return False
+
+
+def _correct_product(match):
+    word = match["word"].lower().replace("ё", "е")
+    if word in _PRODUCT_LOOKALIKES or any(pattern.fullmatch(word) for pattern in WORDS.values()):
+        return match[0]
+    matches = {category for category, forms in _PRODUCT_FORMS.items()
+               if any(_one_typo(word, form) for form in forms)}
+    if len(matches) != 1:
+        return match[0]
+    canonical = {"table": "стол", "chair": "кресло", "lamp": "лампа"}[matches.pop()]
+    return match["prefix"] + canonical
 
 
 def _correct_buyer_text(text):
     # «столь» is also an adverb. Require an item slot with a clear right boundary.
     text = _TABLE_TYPO.sub(r"\1стол", text)
+    text = _PRODUCT_TYPO.sub(_correct_product, text)
+    text = _INITIAL_PRODUCT_TYPO.sub(_correct_product, text)
     text = _THOUSAND_TYPO.sub(r"\1тысяч", text)
     return _CITY_TYPO.sub(lambda m: m["prefix"] + (
         "Азов" if m["city"].lower().startswith("аз") else "Ростов"), text)
