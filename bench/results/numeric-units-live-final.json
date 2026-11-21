@@ -1,0 +1,348 @@
+{
+  "started_at_utc": "2026-11-21T13:29:26.660076+00:00",
+  "team": "team-06",
+  "endpoint": "https://sfedu-hackathon-ai-gateway.sfedu-hackathon-ai-gateway.workers.dev/v1",
+  "model": "google/gemma-4-31B-it",
+  "configuration_source": "root .env",
+  "planned": 6,
+  "executed": 6,
+  "passed": 6,
+  "cases": [
+    {
+      "name": "original",
+      "text": "стол Азов 13.000 км 100 руб",
+      "expected": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "model": {
+        "requirements": {
+          "city_id": null,
+          "budget_rub": null,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ],
+        "requested_location": {
+          "name": "Азов",
+          "type": "city",
+          "city_id": "azov"
+        }
+      },
+      "actual": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Расстояние не поддерживается условиями каталога. Уточните запрос без этого ограничения."
+          }
+        ]
+      },
+      "passed": true
+    },
+    {
+      "name": "kilometers",
+      "text": "Стол в Азове на расстоянии 13 км",
+      "expected": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "model": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": null,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ],
+        "requested_location": {
+          "name": "Азове",
+          "type": "city",
+          "city_id": "azov"
+        }
+      },
+      "actual": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Расстояние не поддерживается условиями каталога. Уточните запрос без этого ограничения."
+          }
+        ]
+      },
+      "passed": true
+    },
+    {
+      "name": "budget_distance",
+      "text": "Стол в Азове. Бюджет 13 000 км",
+      "expected": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "model": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": null,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": null
+      },
+      "actual": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Расстояние не поддерживается условиями каталога. Уточните запрос без этого ограничения."
+          }
+        ]
+      },
+      "passed": true
+    },
+    {
+      "name": "rubles",
+      "text": "Стол в Азове. Бюджет 13 000 рублей",
+      "expected": {
+        "city_id": "azov",
+        "budget_rub": 13000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "model": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": 13000,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": [
+          "table"
+        ],
+        "requested_location": {
+          "name": "Азове",
+          "type": "city",
+          "city_id": "azov"
+        }
+      },
+      "actual": {
+        "city_id": "azov",
+        "budget_rub": 13000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "response": {
+        "status": "ok",
+        "options": [
+          {
+            "listing_ids": [
+              "azTable"
+            ],
+            "total_rub": 2000,
+            "explanation": "Самовывоз · Азов. Стол — 2 000 ₽ (ширина стола 100 см). Итого 2 000 ₽. Запас бюджета 11 000 ₽."
+          }
+        ]
+      },
+      "passed": true
+    },
+    {
+      "name": "mixed",
+      "text": "Стол шириной до 90 см в Азове, бюджет 5000 рублей, расстояние 13 км",
+      "expected": {
+        "city_id": "azov",
+        "budget_rub": 5000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [
+          {
+            "operation": "lte",
+            "value": "90"
+          }
+        ],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "model": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": 5000,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [
+            {
+              "operation": "lte",
+              "value": "90"
+            }
+          ],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": null
+      },
+      "actual": {
+        "city_id": "azov",
+        "budget_rub": 5000,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [
+          {
+            "operation": "lte",
+            "value": "90"
+          }
+        ],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "categories",
+            "text": "Расстояние не поддерживается условиями каталога. Уточните запрос без этого ограничения."
+          }
+        ]
+      },
+      "passed": true
+    },
+    {
+      "name": "ambiguous",
+      "text": "Стол в Азове 13.000",
+      "expected": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "model": {
+        "requirements": {
+          "city_id": "azov",
+          "budget_rub": null,
+          "categories": [
+            "table"
+          ],
+          "width_cm": [],
+          "adjustable_height": null,
+          "color_temperature_k": []
+        },
+        "preferences": [],
+        "intent": "shopping",
+        "requested_categories": null,
+        "requested_location": null
+      },
+      "actual": {
+        "city_id": "azov",
+        "budget_rub": null,
+        "categories": [
+          "table"
+        ],
+        "width_cm": [],
+        "adjustable_height": null,
+        "color_temperature_k": []
+      },
+      "response": {
+        "status": "clarify",
+        "questions": [
+          {
+            "field": "budget_rub",
+            "text": "Указанное число — цена одного товара или общий бюджет на весь комплект?"
+          }
+        ]
+      },
+      "passed": true
+    }
+  ]
+}

@@ -6,7 +6,8 @@ from dataclasses import dataclass, replace
 from buyer.anchors import WORDS, accessory_context, categories_from_dialog
 from buyer.contracts import CATEGORIES, CITIES, Requirements, read_requirements
 from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
-                                TEMPERATURE, WIDTH, Preference, normalize, parse_turn, tighten)
+                                TEMPERATURE, WIDTH, MEASURE, PRICE_PER_ITEM, RELATIVE_BUDGET,
+                                unsupported_measurement, Preference, normalize, parse_turn, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
 
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
@@ -71,9 +72,12 @@ def active_dialog(messages):
 def _unscoped_price(text):
     if BUDGET_WORD.search(text) or not any(pattern.search(text) for pattern in WORDS.values()):
         return False
-    spans = [hit.span() for pattern in (WIDTH, TEMPERATURE) for hit in pattern.finditer(text)]
+    spans = [hit.span() for pattern in (WIDTH, TEMPERATURE, MEASURE) for hit in pattern.finditer(text)]
     for hit in MONEY.finditer(text):
-        if hit["u"] or any(lo <= hit.start() < hi for lo, hi in spans):
+        if any(lo <= hit.start() < hi for lo, hi in spans):
+            continue
+        if hit["u"] and not PRICE_PER_ITEM.search(text) and re.search(
+                r"\b(?:до|не\s+дороже|максимум|не\s+более)\s*$", text[:hit.start()]):
             continue
         # Comparisons without a unit are handled by attribute ambiguity rules.
         if re.search(r"\b(?:до|от|ровно|больше|меньше|шире|уже)\s*$", text[:hit.start()]):
@@ -96,6 +100,10 @@ class LocalState:
     unsupported_city: str | None = None
 
     def decision_questions(self):
+        if self.turn_issue in {"distance", "unsupported_size"}:
+            name = "Расстояние" if self.turn_issue == "distance" else "Указанный размер (высота, длина или глубина)"
+            return ({"field": "categories", "text": name +
+                     " не поддерживается условиями каталога. Уточните запрос без этого ограничения."},)
         if self.unsupported_city:
             return ({"field": "city_id", "text": UNSUPPORTED_CITY_MESSAGE + ", ".join(CITIES.values())
                      + f". Вы указали: «{self.unsupported_city}»."},)
@@ -278,6 +286,10 @@ class ConversationManager:
                 turn.values["categories"] = categories
             elif mentions or "categories" in pending:
                 turn.uncertain.add("categories")
+            if turn_issue in {"price", "chair_price"} and current.categories:
+                # An ambiguous item price does not confirm a composition edit.
+                turn.values.pop("categories", None)
+                turn.uncertain.discard("categories")
             pending = set()
 
             # Unknown prose or unsupported syntax is sent to Gemma with the original dialogue.
@@ -315,6 +327,9 @@ class ConversationManager:
             preferences = evolve(preferences, turn.preferences, text)
             if new_categories is not None:
                 preferences = _filter_preferences(preferences, new_categories)
+            if unsupported_measurement(text):
+                turn_issue = unsupported_measurement(text)
+                needs_model = True
 
         # An uncertain last edit cannot reuse the old value in a local-only result.
         preference_categories = tuple(values["categories"] or ())
@@ -328,6 +343,24 @@ class ConversationManager:
                           unsupported_city)
 
     def merge(self, local, model, messages=()):
+        # Bind numeric model claims to the actual unit-bearing buyer evidence.
+        # A ruble amount elsewhere in the sentence cannot license a distance.
+        texts = [normalize(message["text"]) for message in messages if message["role"] == "user"]
+        measured = any(MEASURE.search(text) for text in texts)
+        if measured:
+            budget = model.requirements.budget_rub
+            evidence = []
+            for text in texts:
+                turn = parse_turn(text, set(), read_requirements(EMPTY))
+                if "budget_rub" in turn.values and not _unscoped_price(text):
+                    evidence.append(turn.values["budget_rub"])
+            if budget not in evidence and not (texts and RELATIVE_BUDGET.search(texts[-1]) and not MEASURE.search(texts[-1])):
+                model = replace(model, requirements=replace(model.requirements, budget_rub=local.requirements.budget_rub))
+        if measured or any(MONEY.search(text) for text in texts):
+            # Local replay retains verified bounds, units, clears and pending answers.
+            model = replace(model, requirements=replace(model.requirements,
+                            width_cm=local.requirements.width_cm,
+                            color_temperature_k=local.requirements.color_temperature_k))
         unknown = tuple(item for item in (*model.requirements.categories, *(model.requested_categories or ()))
                         if item not in CATEGORIES)
         if local.blocked_categories or unknown:
@@ -396,7 +429,8 @@ class ConversationManager:
                 local = replace(local, unsupported_city=location.get("name") or "неизвестный город",
                                 turn_issue=None, confirmed=local.confirmed - {"city_id"})
             elif location.get("type") in {"clear", "uncertain", "other"} or city in CITIES:
-                local = replace(local, unsupported_city=None, turn_issue=None,
+                local = replace(local, unsupported_city=None,
+                                turn_issue=None if local.turn_issue in {"ambiguous", "off_topic"} else local.turn_issue,
                                 requirements=replace(local.requirements, city_id=city if city in CITIES else None),
                                 confirmed=local.confirmed | {"city_id"})
         if local.unsupported_city:

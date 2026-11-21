@@ -79,6 +79,20 @@ textarea::placeholder { color: #57695b; }
 .compose-bottom span { color: var(--muted); font-size: .75rem; padding-left: 2px; }
 .primary { background: var(--forest); color: white; border: 1px solid transparent; border-radius: 10px; padding: 9px 15px; font-weight: 680; font-size: .92rem; }
 .primary:hover { background: #25553e; }
+.compose-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.voice-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--mint); color: var(--forest); padding: 9px 11px; font-size: .85rem; font-weight: 680; }
+.compose-bottom .voice-button span { color: inherit; font-size: inherit; padding: 0; }
+.voice-button svg { flex: none; }
+.voice-button:hover { background: var(--accent); }
+.voice-button[aria-pressed="true"] { background: var(--forest); color: var(--surface); }
+.voice-button[aria-pressed="true"] svg { animation: mic-pulse 1.2s ease-in-out infinite; }
+.voice-button:disabled { cursor: default; }
+.voice-status, .voice-hint { color: var(--muted); font-size: .75rem; line-height: 1.5; margin-top: 8px; overflow-wrap: anywhere; }
+.voice-status { color: var(--forest); font-weight: 650; }
+.voice-status:empty { display: none; }
+@keyframes mic-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .voice-button[aria-pressed="true"] svg { animation: none; } }
+@media (max-width: 450px) { .compose-bottom { flex-wrap: wrap; } .compose-actions { width: 100%; } .compose-actions > button { flex: 1; } }
 .evidence-icon { background: var(--mint); border: 1px solid #dce8d6; border-radius: 10px; width: 38px; height: 38px; display: grid; place-items: center; flex: none; font-size: 1.4rem; color: var(--forest); }
 .conditions { display: grid; margin-top: 13px; }
 .conditions > div { padding-block: 10px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; justify-content: space-between; gap: 9px; font-size: .9rem; }

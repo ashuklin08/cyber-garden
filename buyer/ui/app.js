@@ -15,6 +15,112 @@ const history = [];
 let busy = false;
 let lastOkFingerprint = null;
 
+// Dictation only edits the composer. Dialogue and network operations stay in submit().
+const voiceInput = (() => {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const button = byId("voice");
+  const label = byId("voice-label");
+  const status = byId("voice-status");
+  let session = null;
+  const errors = {
+    "not-allowed": "Разрешите доступ к микрофону в настройках браузера.",
+    "service-not-allowed": "Сервис распознавания запрещён настройками браузера. Вы можете ввести запрос текстом.",
+    "audio-capture": "Не удалось обнаружить микрофон. Проверьте его подключение и настройки.",
+    "no-speech": "Речь не распознана. Попробуйте ещё раз.",
+    network: "Распознавание речи временно недоступно. Вы можете ввести запрос текстом.",
+    "language-not-supported": "Русский язык недоступен для распознавания в этом браузере. Введите запрос текстом.",
+    aborted: "Запись остановлена.",
+  };
+  function sync() {
+    const recording = session !== null && !session.cancelled;
+    button.disabled = !Recognition || busy || !!session?.stopping || !!session?.cancelled;
+    button.setAttribute("aria-pressed", String(recording));
+    const title = recording ? "Остановить запись" : "Голосовой ввод";
+    button.setAttribute("aria-label", title);
+    label.textContent = title;
+    send.disabled = busy || session !== null;
+  }
+  function render(current, interim) {
+    const parts = current.parts.filter(part => part.final || interim).map(part => part.text);
+    const spoken = parts.join(" ").trim();
+    query.value = spoken ? current.base + (current.base && !/\s$/.test(current.base) ? " " : "") + spoken : current.base;
+  }
+  function finish(current) {
+    if (session !== current) return;
+    if (!current.cancelled) {
+      render(current, false);
+      status.textContent = current.error || (current.parts.some(part => part.final && part.text)
+        ? "Речь распознана. Проверьте текст перед отправкой" : errors["no-speech"]);
+    }
+    session = null;
+    query.readOnly = false;
+    sync();
+  }
+  function stop() {
+    if (!session || session.stopping || session.cancelled) return;
+    const current = session;
+    current.stopping = true;
+    render(current, false);
+    status.textContent = "Завершаю запись…";
+    sync();
+    try { current.recognition.stop(); } catch { finish(current); }
+  }
+  function cancel() {
+    if (!session) return;
+    const current = session;
+    current.cancelled = true;
+    query.value = current.base;
+    query.readOnly = false;
+    status.textContent = "";
+    sync();
+    try { current.recognition.abort(); } catch { finish(current); }
+  }
+  function start() {
+    if (!Recognition || busy || session) return;
+    let current;
+    try {
+      const recognition = new Recognition();
+      current = {recognition, base: query.value, parts: [], stopping: false, cancelled: false, error: null};
+      session = current;
+      recognition.lang = "ru-RU";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+      recognition.onstart = () => {
+        if (session === current && !current.stopping && !current.cancelled) status.textContent = "Слушаю…";
+      };
+      recognition.onresult = event => {
+        if (session !== current || current.cancelled || current.error) return;
+        // Results are a cumulative list; replace changed slots instead of appending them.
+        current.parts.length = event.results.length;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          current.parts[i] = {text: event.results[i][0].transcript.trim(), final: event.results[i].isFinal};
+        }
+        render(current, !current.stopping);
+      };
+      recognition.onerror = event => {
+        if (session !== current || current.cancelled) return;
+        current.error = errors[event.error] || errors.network;
+        render(current, false);
+        status.textContent = current.error;
+      };
+      recognition.onend = () => finish(current);
+      query.readOnly = true;
+      status.textContent = "Слушаю…";
+      sync();
+      recognition.start();
+    } catch {
+      if (current) { current.error = errors.network; finish(current); }
+      else status.textContent = errors.network;
+    }
+  }
+  button.addEventListener("click", () => session ? stop() : start());
+  if (!Recognition) status.textContent = "Голосовой ввод доступен в поддерживаемом браузере. Вы можете ввести запрос текстом.";
+  sync();
+  return {sync, stop, cancel, isActive: () => session !== null,
+    explain: () => { status.textContent = "Сначала завершите запись кнопкой микрофона, затем отправьте текст."; }};
+})();
+
 function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -151,6 +257,7 @@ function assistantReply(response, unchanged = false) {
 }
 
 async function submit(text) {
+  if (voiceInput.isActive()) { voiceInput.explain(); return; }
   if (busy || !text.trim()) return;
   if (/^(?:(?:начни|начать|начнем)\s+)?новый\s+диалог[.!?\s]*$/i.test(text.trim())) resetDialogue();
   if (history.length >= 18) {
@@ -159,6 +266,7 @@ async function submit(text) {
     return;
   }
   busy = true;
+  voiceInput.sync();
   const turn = {role: "user", text: text.trim()};
   errorBox.hidden = true;
   send.disabled = true;
@@ -209,6 +317,7 @@ async function submit(text) {
     busy = false;
     send.disabled = false;
     reset.disabled = false;
+    voiceInput.sync();
   }
 }
 
@@ -227,6 +336,7 @@ byId("prompts").addEventListener("click", (event) => {
   if (button) submit(button.dataset.prompt);
 });
 function resetDialogue() {
+  voiceInput.cancel();
   history.length = 0;
   lastOkFingerprint = null;
   messages.replaceChildren(starter);
@@ -245,6 +355,7 @@ reset.addEventListener("click", resetDialogue);
 const buyerTab = byId("buyer-tab");
 const labTab = byId("lab-tab");
 function view(lab) {
+  if (lab) voiceInput.stop();
   buyerTab.setAttribute("aria-pressed", String(!lab));
   labTab.setAttribute("aria-pressed", String(lab));
   byId("buyer-view").hidden = lab;

@@ -13,7 +13,7 @@ CORE = ("city_id", "budget_rub", "categories")
 ATTRIBUTES = ("width_cm", "adjustable_height", "color_temperature_k")
 FIELDS = CORE + ATTRIBUTES
 OWNER = {attribute: category for category, attribute in FEATURES.items()}
-NUMBER = r"(?:\d{1,3}(?: \d{3})+|\d+)(?:[.,]\d+)?"
+NUMBER = r"(?:\d{1,3}(?:[ .]\d{3})+|\d+)(?:[.,]\d+)?"
 NUM_START = r"(?<!\w)(?:(?<=\d-)|(?<![-−]))"
 CITY_FORMS = {
     "taganrog": r"таганрог(?:е|а|у|ом)?",
@@ -41,6 +41,28 @@ OP = re.compile(r"\b(?:" + "|".join(f"(?P<{key}>{pattern})" for key, pattern in 
 WIDTH_UNIT = r"миллиметр\w*|мм|сантиметр\w*|см|метр\w*|м"
 TEMP_UNIT = r"кельвин\w*|[кk]"
 WIDTH = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?P<u>{WIDTH_UNIT})(?!\w)|\b(?P<m>метр(?:а|у|ом|е)?)(?!\w)")
+MEASURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?P<u>километр\w*|км|{WIDTH_UNIT})(?!\w)")
+DIMENSION = re.compile(r"\b(ширин\w*|шире|уже|высот\w*|глубин\w*|длин\w*|расстоян\w*|дистанц\w*|радиус\w*)")
+
+
+def measurement_kind(text, hit):
+    unit = hit["u"] or ""
+    if unit == "км" or unit.startswith("километр"):
+        return "distance"
+    dimensions = list(DIMENSION.finditer(SPLIT.split(text[:hit.start()])[-1]))
+    if dimensions:
+        word = dimensions[-1][0]
+        if word.startswith(("ширин", "шире", "уже")):
+            return "width_cm"
+        return "distance" if word.startswith(("расстоян", "дистанц", "радиус")) else "unsupported_size"
+    if hit.groupdict().get("n") and (unit == "м" or unit.startswith("метр")):
+        return "distance"
+    return "width_cm"
+
+
+def unsupported_measurement(text):
+    return next((measurement_kind(text, hit) for hit in MEASURE.finditer(text)
+                 if measurement_kind(text, hit) != "width_cm"), None)
 TEMPERATURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?P<u>{TEMP_UNIT})(?!\w)")
 SPACED_TEMPERATURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s+(?P<u>{TEMP_UNIT})(?!\w)")
 RANGE_START = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?:до|[-–—])\s*$")
@@ -59,10 +81,10 @@ SPELLED = {
     "двадцать": "20", "тридцать": "30", "пятьдесят": "50", "сто": "100",
 }
 WORD_MONEY = re.compile(r"\b(" + "|".join(SPELLED) + r")(\s+(?:миллион\w*|млн|тыс(?:яч\w*)?|руб\w*))\b")
-BUDGET_WORD = re.compile(r"\b(?:бюджет\w*|на\s+все|за\s+все|общая\s+сумма|"
+BUDGET_WORD = re.compile(r"\b(?:бюджет\w*|на\s+весь\s+комплект|на\s+все|за\s+все|общая\s+сумма|"
                          r"уложиться|максимум|лимит\w*|ценов\w*\s+потолок)\b")
 PRICE_PER_ITEM = re.compile(r"\b(?:за\s+(?:стол\w*|кресл\w*|ламп\w*|стул\w*|светильник\w*)|"
-                            r"на\s+(?:стол\w*|кресл\w*|ламп\w*)|за\s+штуку)\b")
+                            r"на\s+(?:стол\w*|кресл\w*|ламп\w*)|за\s+штуку|стоит|цена\s+(?:стол\w*|кресл\w*|ламп\w*))\b")
 RELATIVE_BUDGET = re.compile(r"\b(?:на\s+[^,.!?]{1,32}\s+(?:меньше|больше|дешевле|дороже)|"
                              r"(?:половин\w*|треть)\s+(?:от\s+)?(?:прошл\w*|прежн\w*)\s+бюджет\w*|"
                              r"(?:прибавь|вычти|снизь|увеличь)\b[^,.!?]*\bбюджет\w*)\b")
@@ -128,6 +150,8 @@ def normalize(text):
 
 
 def _decimal(value):
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", value):
+        value = value.replace(".", "")
     return Decimal(value.replace(" ", "").replace(",", "."))
 
 
@@ -160,6 +184,8 @@ def _operator(prefix, default):
 
 def _numeric_rules(clause, pattern, kind):
     hits = list(pattern.finditer(clause))
+    if pattern is WIDTH:
+        hits = [hit for hit in hits if measurement_kind(clause, hit) == "width_cm"]
     rules = []
     for index, match in enumerate(hits):
         prefix = clause[hits[index - 1].end() if index else 0:match.start()]
@@ -217,6 +243,9 @@ def _budget(text, numeric_spans, prompted, first):
         if re.match(r"\s*(?:[$€]|usd\b|eur\b|доллар\w*\b|евро\b)", suffix):
             return BudgetReading(uncertain=True)
         op = _operator(text[max(0, start - 40):start], None)
+        if _categories(clause) and not BUDGET_WORD.search(clause) and op is None:
+            # Currency alone does not tell us whether this is an item's price.
+            continue
         if unit or explicit or prompted:
             if not explicit and _categories(prefix) and _categories(suffix):
                 return BudgetReading(uncertain=True)
@@ -291,7 +320,7 @@ def parse_turn(message, pending, current):
     if pending_attr == "adjustable_height" and text.strip(" .!?") in {"да", "нет"}:
         turn.values[pending_attr] = text.startswith("да")
         return turn
-    spans = list(_feature_spans(text, WIDTH))
+    spans = list(_feature_spans(text, WIDTH)) + list(_feature_spans(text, MEASURE))
     if "lamp" in active or re.search(FEATURE_WORDS["color_temperature_k"], text):
         spans.extend(_feature_spans(text, SPACED_TEMPERATURE))
         for clause in SPLIT.split(text):
@@ -327,6 +356,8 @@ def parse_turn(message, pending, current):
     elif not budget.preference and re.search(r"\bтыс(?:яч\w*)?\b", text):
         # Inverted/compound colloquial amounts are left to Gemma as a whole.
         turn.uncertain.add("budget_rub")
+    if unsupported_measurement(text) and budget.amount is None:
+        turn.uncertain.discard("budget_rub")
 
     if (len(active) == 1 and "budget_rub" not in pending
             and not BUDGET_WORD.search(text) and not SOFT.search(text)):

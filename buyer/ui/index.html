@@ -53,8 +53,16 @@
             <textarea id="query" rows="2" maxlength="4000" placeholder="Например, нужен стол до 100 см в Азове…"></textarea>
             <div class="compose-bottom">
               <span>Enter · отправить</span>
-              <button class="primary" id="send" type="submit">Подобрать</button>
+              <div class="compose-actions">
+                <button class="voice-button" id="voice" type="button" aria-label="Голосовой ввод" aria-pressed="false" aria-describedby="voice-status voice-hint">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8"/></svg>
+                  <span id="voice-label">Голосовой ввод</span>
+                </button>
+                <button class="primary" id="send" type="submit">Подобрать</button>
+              </div>
             </div>
+            <p id="voice-status" class="voice-status" role="status" aria-live="polite"></p>
+            <p id="voice-hint" class="voice-hint">Распознавание выполняется средствами браузера. Проверьте текст перед отправкой. Браузер может передавать звук своему поставщику распознавания.</p>
           </form>
           <div class="error" id="error" role="alert" hidden></div>
         </section>
