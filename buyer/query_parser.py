@@ -88,6 +88,21 @@ class Preference:
     attribute: str | None = None
 
 
+def typed_preference(pref):
+    """Recover the internal attribute tag from grounded Gemma soft text."""
+    if pref.attribute is not None:
+        return pref
+    text = normalize(pref.text)
+    attr = None
+    if pref.category == "table" and WIDTH.search(text):
+        attr = "width_cm"
+    elif pref.category == "lamp" and TEMPERATURE.search(text):
+        attr = "color_temperature_k"
+    elif pref.category == "chair" and CHAIR.search(text):
+        attr = "adjustable_height"
+    return Preference(pref.category, pref.text, attr)
+
+
 @dataclass
 class Turn:
     values: dict = field(default_factory=dict)
@@ -195,8 +210,7 @@ def _budget(text, numeric_spans, prompted, first):
         if re.match(r"\s*(?:[$€]|usd\b|eur\b|доллар\w*\b|евро\b)", suffix):
             return BudgetReading(uncertain=True)
         op = _operator(text[max(0, start - 40):start], None)
-        standalone = not OP.sub("", prefix).strip() and not suffix.strip(" .!?")
-        if unit or explicit or prompted or ((first or standalone) and op in {"lte", "lt"}):
+        if unit or explicit or prompted:
             if not explicit and _categories(prefix) and _categories(suffix):
                 return BudgetReading(uncertain=True)
             if SOFT.search(clause) and not re.search(r"\b(?:строго|предел|обязательн\w*)\b", clause):
@@ -277,6 +291,22 @@ def parse_turn(message, pending, current):
                     if _value(match, "color_temperature_k") >= 1000:
                         start = text.find(clause)
                         spans.append((start + match.start(), start + match.end()))
+    # Reserve numbers in explicitly named measurements before reading money.
+    # Without units they need clarification, not an assumed currency or scale.
+    for clause in SPLIT.split(text):
+        budget_marker = BUDGET_WORD.search(clause)
+        measurement = clause[:budget_marker.start()] if budget_marker else clause
+        offset = text.find(clause)
+        for attr in ("width_cm", "color_temperature_k"):
+            if not re.search(r"\b(?:" + FEATURE_WORDS[attr] + r")\b", measurement):
+                continue
+            bare = [hit for hit in BARE_MEASURE.finditer(measurement)
+                    if not any(lo <= offset + hit.start() < hi for lo, hi in spans)
+                    and not ((money := MONEY.match(measurement, hit.start())) and money["u"])]
+            if bare:
+                spans.extend((offset + hit.start(), offset + hit.end()) for hit in bare)
+                turn.uncertain.add(attr)
+                turn.ambiguous_attributes.add(attr)
     budget = _budget(text, spans, "budget_rub" in pending, current.budget_rub is None)
     if budget.preference and len(budget.preference) <= 120:
         turn.preferences.append(Preference(None, budget.preference, "budget_rub"))
@@ -284,6 +314,9 @@ def parse_turn(message, pending, current):
         turn.values["budget_rub"] = budget.amount
     elif budget.uncertain or (not budget.preference and
                               re.search(r"\b(?:дешевле|дороже|подешевле|потолок|сумм\w*)\b", text)):
+        turn.uncertain.add("budget_rub")
+    elif not budget.preference and re.search(r"\bтыс(?:яч\w*)?\b", text):
+        # Inverted/compound colloquial amounts are left to Gemma as a whole.
         turn.uncertain.add("budget_rub")
 
     owner = next(iter(current.categories), None) if len(current.categories) == 1 else None
@@ -306,7 +339,7 @@ def parse_turn(message, pending, current):
                     continue
                 explicit = bool(re.search(rf"\b(?:{words})\b", fragment))
                 owns_value = category in categories or (not categories and
-                    (owner == category or (explicit and category in active)))
+                    (owner == category or explicit))
                 if not owns_value:
                     continue
                 if attr == "adjustable_height":

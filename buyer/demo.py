@@ -107,7 +107,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             query, trace = ConversationManager().resolve(
-                messages, self._gemma, require_model=self.path == "/api/lab"
+                messages, self._gemma, require_model=True
             )
         except GatewayBusy:
             self._json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Gemma уже обрабатывает запрос. Повторите чуть позже."})

@@ -25,7 +25,15 @@ def main():
         request = read_messages(decode_json(sys.stdin.buffer.read()))
         listings = read_catalog(decode_json(args.catalog.read_bytes()))
         query, _ = ConversationManager().resolve(request, extract, require_model=True)
-        response = select(listings, query.requirements, query.preferences).response
+        attribute_questions = query.attribute_questions() if not query.questions() else ()
+        if attribute_questions:
+            # The official schema has no attribute-specific question fields.
+            # Keep the supported categories and ask about their requirements
+            # using the permitted composition field, rather than ignoring a bound.
+            response = {"status": "clarify", "questions": [{"field": "categories", "text":
+                        "Уточните требования к товарам комплекта. " + " ".join(attribute_questions)}]}
+        else:
+            response = select(listings, query.requirements, query.preferences).response
     except ModelError as error:
         print(f"run: {error}", file=sys.stderr)
         return 2

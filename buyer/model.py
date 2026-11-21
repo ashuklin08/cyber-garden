@@ -132,8 +132,10 @@ def _gateway(request):
     for attempt in range(2):
         try:
             timeout = min(89, deadline - time.monotonic())
+            if timeout <= 0:
+                raise ModelError("Истекло общее время ожидания шлюза Gemma.")
             with opener.open(request, timeout=timeout) as response:
-                return response.read(128_001)
+                return _read_body(response, deadline)
         except urllib.error.HTTPError as error:
             delay = _retry_delay(error)
             if (attempt == 0 and error.code in RETRYABLE and delay is not None
@@ -148,6 +150,34 @@ def _gateway(request):
             raise ModelError(f"Шлюз Gemma вернул HTTP {status}.") from None
         except (urllib.error.URLError, OSError, HTTPException):
             raise ModelError("Соединение со шлюзом Gemma не установлено или истекло время ожидания.") from None
+
+
+def _read_body(response, deadline):
+    """Bound total body time, including servers that continually drip bytes.
+
+    read1 returns after one buffered/socket read; a single read(size) can wait
+    through arbitrarily many successful short reads. Refresh the socket timeout
+    to the remaining shared deadline before each operation.
+    """
+    chunks = []
+    size = 0
+    while size < 128_001:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ModelError("Истекло общее время ожидания шлюза Gemma.")
+        if response.isclosed():
+            break
+        response.fp.raw._sock.settimeout(min(89, remaining))
+        chunk = response.read1(min(16_384, 128_001 - size))
+        if not chunk:
+            if time.monotonic() >= deadline:
+                raise ModelError("Истекло общее время ожидания шлюза Gemma.")
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+    if time.monotonic() >= deadline:
+        raise ModelError("Истекло общее время ожидания шлюза Gemma.")
+    return b"".join(chunks)
 
 
 def _tokens(usage, key):

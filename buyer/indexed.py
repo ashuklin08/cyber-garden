@@ -85,6 +85,12 @@ class SearchProvider:
         self.index = index_name(index)
 
     def search(self, req, preferences=(), expand=True, cache=None):
+        try:
+            return self._search(req, preferences, expand, cache)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+            raise SearchError("Некорректный или неполный ответ поискового индекса") from None
+
+    def _search(self, req, preferences=(), expand=True, cache=None):
         if not req.categories or req.city_id is None or req.budget_rub is None:
             return Retrieved(select((), req), (), {}, 0)
         buckets = {}
@@ -112,11 +118,18 @@ class SearchProvider:
                                       "query": {"bool": query}, "aggs": buckets})
         if raw["timed_out"] or raw["_shards"]["failed"]:
             raise SearchError("Неполный ответ поискового индекса")
+        if set(raw["aggregations"]) != set(req.categories):
+            raise SearchError("Индекс не вернул все запрошенные категории")
         groups, titles, scores, counts = {}, {}, {}, {}
         for category, group in raw["aggregations"].items():
             counts[category] = group["doc_count"]
             hits = group["cheap"]["hits"]["hits"]
             ranked = group.get("relevant", {}).get("hits", {}).get("hits", {}).get("hits", [])
+            if (type(counts[category]) is not int or counts[category] < 0
+                    or not isinstance(hits, list) or not isinstance(ranked, list)
+                    or (counts[category] > 0 and not hits)
+                    or (counts[category] == 0 and (hits or ranked))):
+                raise SearchError("Несогласованное число результатов индекса")
             by_id = {}
             for hit in hits + ranked:
                 row = hit["_source"]
@@ -124,8 +137,12 @@ class SearchProvider:
                 if (hit["_id"] != item.id or item.city_id != req.city_id or item.category != category
                         or not matches(item, req.condition(category))):
                     raise SearchError("Индекс вернул несогласованные данные")
+                if item.id in by_id and by_id[item.id] != item:
+                    raise SearchError("Индекс вернул противоречивые данные одного ID")
                 by_id[item.id] = item
                 titles[item.id] = row["title"]
+            if len(by_id) > counts[category]:
+                raise SearchError("Число ID превышает размер категории индекса")
             order = [hit["_id"] for hit in ranked]
             if self.semantic and category in wishes:
                 lexical = list(dict.fromkeys(order + [hit["_id"] for hit in hits]))

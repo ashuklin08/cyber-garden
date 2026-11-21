@@ -9,9 +9,11 @@ There is no network, model loading, instruction execution or fact extraction.
 import re
 from itertools import product
 import heapq
+import operator
 
 from buyer.anchors import WORDS
-from buyer.query_parser import normalize
+from buyer.contracts import FEATURES
+from buyer.query_parser import CHAIR, TEMPERATURE, WIDTH, _numeric_rules, normalize, typed_preference
 
 # Shared with the existing OpenSearch positive-wish expansion.
 ALIASES = {"деревян": "дерево массив сосна", "мягк": "мягкое мягкая обивка",
@@ -45,9 +47,17 @@ def tokens(text):
 def listing_scores(groups, preferences):
     """Return internal fixed-point scores for every strictly eligible listing."""
     wishes = {}
+    structured = {}
     for pref in preferences:
-        if (pref.category not in groups or pref.attribute
-                or re.search(r"\b(?:не|без)\b", normalize(pref.text))):
+        pref = typed_preference(pref)
+        if pref.category not in groups:
+            continue
+        if pref.attribute:
+            condition = _soft_condition(pref)
+            if condition is not None:
+                structured.setdefault(pref.category, set()).add(condition)
+            continue
+        if re.search(r"\b(?:не|без)\b", normalize(pref.text)):
             continue
         query = tokens(pref.text)
         if query:
@@ -55,14 +65,41 @@ def listing_scores(groups, preferences):
     scores = {}
     for category, items in groups.items():
         queries = wishes.get(category, ())
+        conditions = structured.get(category, ())
         for item in items:
-            if not queries:
+            if not queries and not conditions:
                 scores[item.id] = 0
                 continue
-            document = tokens(item.title) | tokens(item.description)
-            scores[item.id] = sum(10000 * len(query & document) // len(query)
-                                  for query in queries) // len(queries)
+            document = (tokens(item.title) | tokens(item.description)) if queries else frozenset()
+            lexical = sum(10000 * len(query & document) // len(query) for query in queries)
+            numeric = sum(10000 for condition in conditions if _soft_match(item, condition))
+            scores[item.id] = (lexical + numeric) // (len(queries) + len(conditions))
     return scores
+
+
+def _soft_condition(pref):
+    """Parse a typed soft wish without adding anything to hard requirements."""
+    if FEATURES.get(pref.category) != pref.attribute:
+        return None
+    text = normalize(pref.text)
+    if pref.attribute == "adjustable_height":
+        options = {not hit[0].startswith(("без", "не ", "фиксированн")) for hit in CHAIR.finditer(text)}
+        return (("bool", options.pop()),) if len(options) == 1 and "не без" not in text else None
+    pattern = WIDTH if pref.attribute == "width_cm" else TEMPERATURE
+    rules = _numeric_rules(text, pattern, pref.attribute)
+    return tuple((op, value) for op, value in rules) if rules else None
+
+
+SOFT_CHECK = {"eq": operator.eq, "lt": operator.lt, "lte": operator.le,
+              "gt": operator.gt, "gte": operator.ge}
+
+
+def _soft_match(item, condition):
+    if item.feature is None:
+        return False
+    if condition[0][0] == "bool":
+        return item.feature is condition[0][1]
+    return all(SOFT_CHECK[op](item.feature, value) for op, value in condition)
 
 
 def ranked_bundles(groups, budget, scores):

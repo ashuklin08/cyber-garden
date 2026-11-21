@@ -52,6 +52,7 @@ class LocalState:
     unresolved: frozenset[str]
     ambiguous_attributes: frozenset[str]
     needs_model: bool
+    blocked_categories: bool = False
 
     def questions(self):
         values = self.requirements
@@ -119,6 +120,8 @@ class ConversationManager:
         preferences = ()
         pending = set()
         needs_model = False
+        composition_history = []
+        blocked_categories = False
         for message in messages:
             text = normalize(message["text"])
             if message["role"] == "assistant":
@@ -128,9 +131,20 @@ class ConversationManager:
             current = read_requirements(values)
             turn = parse_turn(message["text"], pending, current)
             composition = category_text(text)
+            composition_history.append({"role": "user", "text": composition})
+            anchor = categories_from_dialog(composition_history)
             recognized, categories = _category_update(composition, current.categories, "categories" in pending)
             mentions = any(pattern.search(composition) for pattern in WORDS.values())
-            if recognized:
+            was_blocked = blocked_categories
+            blocked_categories = bool(anchor.pending_unknown)
+            if blocked_categories:
+                # Retain the known part for replay, but never confirm a partial set.
+                values["categories"] = list(anchor.supported)
+                turn.uncertain.add("categories")
+                turn.values.pop("categories", None)
+            elif was_blocked and anchor.categories:
+                turn.values["categories"] = list(anchor.categories)
+            elif recognized:
                 turn.values["categories"] = categories
             elif mentions or "categories" in pending:
                 turn.uncertain.add("categories")
@@ -178,12 +192,14 @@ class ConversationManager:
         requirements = read_requirements(values)
         return LocalState(requirements, _filter_preferences(preferences, requirements.categories),
                           frozenset(confirmed), frozenset(unresolved),
-                          frozenset(ambiguous_attributes), needs_model)
+                          frozenset(ambiguous_attributes), needs_model, blocked_categories)
 
     def merge(self, local, model, messages=()):
         fields = {field: getattr(local.requirements, field)
                   for field in local.confirmed | local.ambiguous_attributes}
         requirements = replace(model.requirements, **fields)
+        if local.blocked_categories:
+            requirements = replace(requirements, categories=())
         preferences = (evolve(tuple(pref for pref in local.preferences if pref.attribute),
                               grounded((*local.preferences, *model.preferences), messages), "")
                        if messages else evolve(local.preferences, model.preferences, ""))

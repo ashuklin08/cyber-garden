@@ -3,7 +3,7 @@
 import re
 
 from buyer.anchors import WORDS, categories_from_dialog
-from buyer.query_parser import Preference, QUALITIES, SPLIT, normalize
+from buyer.query_parser import Preference, QUALITIES, SPLIT, normalize, typed_preference
 from buyer.ranking import tokens
 
 RESET = re.compile(r"\b(?:без пожеланий|пожелания\s+(?:больше\s+)?не\s+важны|"
@@ -62,8 +62,8 @@ def category_text(text):
 def evolve(previous, incoming, text):
     text = normalize(text)
     previous = () if RESET.search(text) else previous
-    new = tuple(pref for pref in incoming if isinstance(pref.text, str)
-                and 0 < len(pref.text.strip()) <= 120 and not rejected(pref, text))
+    new = tuple(typed_preference(pref) for pref in incoming if isinstance(pref.text, str)
+                and 0 < len(pref.text.strip()) <= 120 and not rejected(typed_preference(pref), text))
     previous = tuple(pref for pref in previous if not rejected(pref, text))
     if (re.search(r"\b(?:теперь|вместо|замени|лучше)\b", text)
             and not re.search(r"\b(?:добавь|также|еще)\b", text)):

@@ -28,6 +28,44 @@ AMBIGUOUS = re.compile(r"\b(?:или|либо|может|возможно|есл
 class CategoryAnchor:
     categories: tuple[str, ...] | None
     reason: str
+    supported: tuple[str, ...] = ()
+    pending_unknown: tuple[str, ...] = ()
+
+
+ITEM_CUE = re.compile(r"\b(?:и|плюс|добавь|добавить|без|убери|исключи|удали|"
+                      r"нуж\w*|хочу|ищу|только)\s+"
+                      r"(?:(?:\w+(?:ый|ий|ой|ая|яя|ое|ые|ую|ого|ому|ыми|ых)|очень|еще|мне)\s+){0,3}$")
+NON_ITEMS = re.compile(r"^(?:в|на|до|от|не|еще|также|все|тот|те|же|теперь|лучше|"
+                       r"желательн\w*|предпочтительн\w*|обязательн\w*|очень|нуж\w*|"
+                       r"хочу|ищу|добавь|добавить|убери|без|только|вместо|подбери|найди|"
+                       r"бюджет\w*|ширин\w*|температур\w*|свет\w*|город\w*|самовывоз\w*|"
+                       r"таганрог\w*|азов\w*|ростов\w*|регулиров\w*|комплект\w*|"
+                       r"тысяч\w*|рубл\w*|цен\w*|главное|как|услови\w*)$")
+
+
+def _unknown_items(text):
+    """Conservative item slots, not a dictionary of all unsupported products.
+
+    An unfamiliar word in an item position is unresolved and goes to Gemma.
+    Adjectives/constraint clauses are not treated as additional requested goods.
+    """
+    hits = {(hit.start(), hit.end()): hit for hit in UNSUPPORTED.finditer(text)}
+    for hit in re.finditer(r"[а-яa-z][а-яa-z-]*", text):
+        before = text[:hit.start()]
+        initial_removal = not before.strip() and AFTER_REMOVE.search(text[hit.end():])
+        if not (initial_removal or re.search(r"[,;]\s*$", before) or ITEM_CUE.search(before)):
+            continue
+        word = hit[0]
+        if (NON_ITEMS.fullmatch(word) or any(pattern.fullmatch(word) for pattern in WORDS.values())
+                or re.match(r"\s+(?:тыс\w*|руб\w*)\b", text[hit.end():])
+                or re.search(r"(?:ый|ий|ой|ая|яя|ое|ее|ые|ие|ую|ого|ому|ыми|ых)$", word)):
+            continue
+        hits[hit.span()] = hit
+    return sorted(hits.values(), key=lambda hit: hit.start())
+
+
+def _item_key(word):
+    return re.sub(r"(?:ами|ах|ом|ов|а|у|е|ы)$", "", word)
 
 
 def categories_from_dialog(messages, initial=()):
@@ -45,7 +83,7 @@ def categories_from_dialog(messages, initial=()):
         only_category = any(ONLY.search(text[:start]) for start, _, _ in mentions)
         if only_category:
             unsupported_requested.clear()
-        for match in UNSUPPORTED.finditer(text):
+        for match in _unknown_items(text):
             before = text[max(0, match.start() - 32):match.start()]
             after = text[match.end():match.end() + 32]
             if re.search(r"\b(?:для|под|к|от|на|с|со)\s*$", before):
@@ -53,8 +91,9 @@ def categories_from_dialog(messages, initial=()):
             removed = (REMOVE.search(before) or re.search(r"\bне\s+нуж\w*\s*$", before)
                        or AFTER_REMOVE.search(after))
             if removed:
+                unsupported_requested.discard(_item_key(match[0]))
                 continue
-            unsupported_requested.add(match[0])
+            unsupported_requested.add(_item_key(match[0]))
         if not mentions:
             continue
         if AMBIGUOUS.search(text):
@@ -88,7 +127,10 @@ def categories_from_dialog(messages, initial=()):
         selected.difference_update(removes)
 
     if unsupported_requested:
-        return CategoryAnchor(None, "В запросе есть товар вне каталога")
+        return CategoryAnchor(None, "В запросе есть товар вне каталога",
+                              tuple(key for key in CATEGORIES if key in selected),
+                              tuple(sorted(unsupported_requested)))
     if not selected:
         return CategoryAnchor(None, "Категории нужно уточнить")
-    return CategoryAnchor(tuple(key for key in CATEGORIES if key in selected), "Явные категории и изменения")
+    result = tuple(key for key in CATEGORIES if key in selected)
+    return CategoryAnchor(result, "Явные категории и изменения", result)
