@@ -1,6 +1,7 @@
 """Local browser demo. The CLI and browser share the same interpretation and solver."""
 
 import argparse
+import errno
 import json
 import socket
 import sys
@@ -229,6 +230,8 @@ def main():
     parser.add_argument("--search-url", default="http://127.0.0.1:19200")
     parser.add_argument("--semantic-model", type=Path, help="Папка с ONNX E5 и tokenizer.json")
     args = parser.parse_args()
+    if not 0 <= args.port <= 65535:
+        parser.error("--port должен быть от 0 до 65535")
     provider = SearchProvider(args.search_url, args.index) if args.index else None
     if args.semantic_model:
         if not provider:
@@ -239,12 +242,12 @@ def main():
     # A previous demo process is often still running during a presentation.
     # Pick the next port instead of failing with an opaque bind error.
     server = None
-    for port in range(args.port, args.port + 10):
+    for port in range(args.port, min(args.port + 10, 65536)):
         try:
             server = DemoServer(port, args.catalog, provider)
             break
         except OSError as error:
-            if getattr(error, "errno", None) != 48 and getattr(error, "winerror", None) != 10048:
+            if error.errno != errno.EADDRINUSE and getattr(error, "winerror", None) != 10048:
                 raise
     if server is None:
         parser.error(f"Порты {args.port}–{args.port + 9} заняты. Остановите старое демо или задайте --port.")
