@@ -1,0 +1,90 @@
+{
+  "model": "nomic-ai/nomic-embed-vision-v1.5",
+  "revision": "e3a725bce72db07ca4adb1d83da08903f3ee02f8",
+  "fingerprint": "2838f16661ab26290e2bd89ee569461256f4411575e00cb19ca1c5df029da583",
+  "method": "midpoint_between_min_positive_and_max_negative_cosine_on_frozen_calibration_pairs",
+  "evaluation_sha256": "f804425def5b1dfbef7bf80c9eafeb0ca90777c1de7e4a08ebae1e249edb15f3",
+  "threshold": 0.8367531895637512,
+  "min_positive": 0.9370191097259521,
+  "max_negative": 0.7364872694015503,
+  "positive_pairs": 2,
+  "negative_pairs": 7,
+  "limitations": "Small synthetic demo only; no claim of production accuracy or calibrated probabilities.",
+  "model_load_ms": 560.9654989093542,
+  "query_embedding_ms": [
+    212.35599927604198,
+    143.81450042128563,
+    157.29410015046597,
+    142.18479953706264,
+    165.38479924201965
+  ],
+  "observations": [
+    {
+      "split": "calibration",
+      "path": "queries/table.png",
+      "sha256": "b68fce37cf1723855566b456f8970d2fe237f2bac4f991a208a011ad07d1dd04",
+      "expected_id": "t12",
+      "top_id": "t12",
+      "top_cosine": 0.9370191097259521,
+      "scores": {
+        "t12": 0.9370191097259521,
+        "c04": 0.6890948414802551,
+        "l09": 0.7364872694015503
+      }
+    },
+    {
+      "split": "calibration",
+      "path": "queries/chair.png",
+      "sha256": "22bcdc698e850dd185d8854daf513437ae69d44113de3e0fbaab11890111456e",
+      "expected_id": "c04",
+      "top_id": "c04",
+      "top_cosine": 0.9474557042121887,
+      "scores": {
+        "t12": 0.6693300008773804,
+        "c04": 0.9474557042121887,
+        "l09": 0.6818904280662537
+      }
+    },
+    {
+      "split": "calibration",
+      "path": "queries/cat.png",
+      "sha256": "9d532c285d57c55b97f4d03a5694ab09220ec655060b116dd0ba1f4c4e06dc03",
+      "expected_id": null,
+      "top_id": "c04",
+      "top_cosine": 0.6652263402938843,
+      "scores": {
+        "t12": 0.6408662796020508,
+        "c04": 0.6652263402938843,
+        "l09": 0.657220184803009
+      }
+    },
+    {
+      "split": "holdout",
+      "path": "queries/lamp.png",
+      "sha256": "e21dd1137c08ba04c948cb111fd1c1c02612b696a2ddfe906d636160f6dba64b",
+      "expected_id": "l09",
+      "top_id": "l09",
+      "top_cosine": 0.879052460193634,
+      "scores": {
+        "t12": 0.6425424218177795,
+        "c04": 0.6650639772415161,
+        "l09": 0.879052460193634
+      },
+      "passed": true
+    },
+    {
+      "split": "holdout",
+      "path": "queries/landscape.png",
+      "sha256": "f99c403baaf188ab731ff70c1b9a5626d0b32aea14f448528923234b711b742e",
+      "expected_id": null,
+      "top_id": "t12",
+      "top_cosine": 0.6475746631622314,
+      "scores": {
+        "t12": 0.6475746631622314,
+        "c04": 0.6086316704750061,
+        "l09": 0.6302860379219055
+      },
+      "passed": true
+    }
+  ]
+}

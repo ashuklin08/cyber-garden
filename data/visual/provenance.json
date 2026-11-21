@@ -1,0 +1,46 @@
+{
+  "generator": "Built-in image_gen tool, new image generation, no seller photographs",
+  "synthetic": true,
+  "assets": [
+    {
+      "path": "products/table.png",
+      "prompt": "Use case: product-mockup. Asset type: synthetic demonstration listing photo for a local image similarity demo. One plain rectangular pine writing desk, pale natural wood grain, four straight wooden legs, no drawers, fully visible alone against a neutral off-white room background. Three quarter view, natural window light, realistic used-furniture listing photograph, square composition. No chairs, lamps, text, logos or watermarks.",
+      "sha256": "754b87a18cd929d15ddf15f9f0580f6ec7d4ef9b768ffb35ad8378c2b3360aba"
+    },
+    {
+      "path": "products/chair.png",
+      "prompt": "Use case: product-mockup. Synthetic demonstration listing photograph: one black fabric upholstered home office swivel chair, adjustable height, black five-star caster base, slightly faded fabric backrest. Entire chair visible alone, neutral pale grey room, natural daylight, three-quarter view. No desk, lamps, people, text, logos or watermark. Square composition.",
+      "sha256": "cec3990754611ec7532d68324945d4ff87ca15410c4dee97e59469425f18a3ef"
+    },
+    {
+      "path": "products/lamp.png",
+      "prompt": "Use case: product-mockup. Synthetic demonstration product photograph: one white articulated LED desk lamp with round base, slender adjustable arm and elongated lamp head, warm light switched on, alone on a neutral plain surface against grey background. Full object visible, natural listing photo, three-quarter view, square composition. No other furniture, text, logos, watermark or people.",
+      "sha256": "4e1664e7363523cba11014c2abfaf4c0f60f293ca110ec9e62351830544d7382"
+    },
+    {
+      "path": "queries/table.png",
+      "prompt": "Synthetic test photo, realistic phone camera shot of a plain pale pine rectangular writing desk with four straight wooden legs, no drawers, viewed from the front left in a small room with beige wall. Fully visible desk, no chairs or lamps, no text or watermark. Square.",
+      "sha256": "b68fce37cf1723855566b456f8970d2fe237f2bac4f991a208a011ad07d1dd04"
+    },
+    {
+      "path": "queries/chair.png",
+      "prompt": "Synthetic test phone photograph of one black fabric office swivel chair with armrests and five casters, slight side view, bright home room, entire object visible. No desk, lamps, text or logo. Square.",
+      "sha256": "22bcdc698e850dd185d8854daf513437ae69d44113de3e0fbaab11890111456e"
+    },
+    {
+      "path": "queries/cat.png",
+      "prompt": "Synthetic test photograph: a ginger cat sitting on a garden path outdoors, plants behind it. No furniture, no desk, chair or lamps, no text or watermark. Square.",
+      "sha256": "9d532c285d57c55b97f4d03a5694ab09220ec655060b116dd0ba1f4c4e06dc03"
+    },
+    {
+      "path": "queries/lamp.png",
+      "prompt": "Synthetic test phone photograph of a white LED desk lamp with round base, articulated slender arm and elongated horizontal head, warm light, viewed slightly from the other side against a pale blue wall. Entire lamp, no furniture, no text or watermark. Square.",
+      "sha256": "e21dd1137c08ba04c948cb111fd1c1c02612b696a2ddfe906d636160f6dba64b"
+    },
+    {
+      "path": "queries/landscape.png",
+      "prompt": "Synthetic test landscape photograph of rugged snow-capped mountains and a lake, outdoor daylight. No furniture, no desk, chair or lamps, no people or text. Square.",
+      "sha256": "f99c403baaf188ab731ff70c1b9a5626d0b32aea14f448528923234b711b742e"
+    }
+  ]
+}

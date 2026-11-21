@@ -1,0 +1,175 @@
+{
+  "architecture": "Optional lazy photo API; isolated persistent CPU worker; independent manifest, model weights, vectors, calibration and UI state",
+  "changed_existing_files": [
+    ".gitignore",
+    "README.md",
+    "buyer/demo.py",
+    "buyer/ui/index.html",
+    "buyer/ui/app.js",
+    "buyer/ui/styles.css",
+    "tests/ui_dialogue.cjs"
+  ],
+  "added_files": [
+    "buyer/vision/__init__.py",
+    "buyer/vision/config.py",
+    "buyer/vision/embeddings.py",
+    "buyer/vision/image_validation.py",
+    "buyer/vision/index.py",
+    "buyer/vision/model.py",
+    "buyer/vision/service.py",
+    "data/visual/calibration.json",
+    "data/visual/evaluation.json",
+    "data/visual/manifest.json",
+    "data/visual/provenance.json",
+    "data/visual/products/chair.png",
+    "data/visual/products/lamp.png",
+    "data/visual/products/table.png",
+    "data/visual/queries/cat.png",
+    "data/visual/queries/chair.png",
+    "data/visual/queries/lamp.png",
+    "data/visual/queries/landscape.png",
+    "data/visual/queries/table.png",
+    "scripts/download_vision_model.py",
+    "scripts/build_visual_index.py",
+    "scripts/calibrate_visual_search.py",
+    "bench/vision_real.py",
+    "tests/test_vision.py",
+    "tests/test_vision_api.py",
+    "tests/test_vision_isolation.py",
+    "requirements-vision.txt",
+    "bench/results/vision-calibration.json",
+    "bench/results/vision-official-after.json",
+    "bench/results/vision-official-before.json",
+    "bench/results/vision-prototype.json",
+    "bench/results/vision-real.json",
+    "bench/results/vision-api-targeted.txt",
+    "bench/results/vision-offline-final.txt",
+    "bench/results/vision-targeted.txt",
+    "bench/results/vision-ui-offline.txt",
+    "bench/results/vision-verification.json"
+  ],
+  "model": {
+    "provider": "CPUExecutionProvider",
+    "source": "https://huggingface.co/nomic-ai/nomic-embed-vision-v1.5",
+    "revision": "e3a725bce72db07ca4adb1d83da08903f3ee02f8",
+    "license": "Apache-2.0",
+    "id": "nomic-ai/nomic-embed-vision-v1.5",
+    "weights_file": "onnx/model_int8.onnx",
+    "bytes": 96745606,
+    "sha256": "ba9107df6e412828dae8c675096209aa39f6536de8ec8d9a872665b54dc750c3"
+  },
+  "tests": {
+    "real_http_passed": 5,
+    "optional_vision_tests": 31,
+    "dom_total": 46,
+    "dom_passed": 46,
+    "browser_manual_tested": false,
+    "holdout_total": 2,
+    "holdout_passed": 2,
+    "offline_total": 199,
+    "offline_passed": 199,
+    "real_http_total": 5
+  },
+  "isolation": {
+    "official_cli_unchanged": true,
+    "base_python_without_site_packages_test": true,
+    "model_error_timeout_missing_assets_test": true,
+    "physical_removal_cli_and_http_test": true,
+    "forbidden_imports_test": true,
+    "core_nlu_search_ranking_unchanged": true
+  },
+  "official_files": {
+    "byte_identical": true,
+    "git_comparison": "No content differences against reference checkout; original SHA-256 preserved byte-for-byte.",
+    "after": "vision-official-after.json",
+    "count": 16,
+    "before": "vision-official-before.json"
+  },
+  "threshold": {
+    "method": "midpoint_between_min_positive_and_max_negative_cosine_on_frozen_calibration_pairs",
+    "limitation": "Small synthetic demo only; no claim of production accuracy or calibrated probabilities.",
+    "negative_pairs": 7,
+    "value": 0.8367531895637512,
+    "positive_pairs": 2
+  },
+  "coverage": {
+    "catalog_total": 111,
+    "indexed": 3
+  },
+  "timings": {
+    "build": {
+      "model_load_ms": 504.03449870646,
+      "build_ms": 1027.65859849751
+    },
+    "requests": [
+      {
+        "api_ms": 1159.6614997833967,
+        "name": "table",
+        "wall_ms": 1252.5884993374348,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 125.22800080478191,
+          "cosine_ms": 0.04249997437000275,
+          "total_ms": 830.7796008884907
+        }
+      },
+      {
+        "api_ms": 174.8490985482931,
+        "name": "chair",
+        "wall_ms": 247.27270007133484,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 122.70460091531277,
+          "cosine_ms": 0.03110058605670929,
+          "total_ms": 170.2897995710373
+        }
+      },
+      {
+        "api_ms": 158.62120129168034,
+        "name": "lamp",
+        "wall_ms": 228.03760133683681,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 113.6070005595684,
+          "cosine_ms": 0.02319924533367157,
+          "total_ms": 155.09120002388954
+        }
+      },
+      {
+        "api_ms": 183.7346013635397,
+        "name": "cat",
+        "wall_ms": 282.6173007488251,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 125.67929923534393,
+          "cosine_ms": 0.024199485778808594,
+          "total_ms": 178.58700081706047
+        }
+      },
+      {
+        "api_ms": 184.55320037901402,
+        "name": "landscape",
+        "wall_ms": 275.1768995076418,
+        "timings": {
+          "model_load_ms": 533.7451994419098,
+          "embedding_ms": 126.53540074825287,
+          "cosine_ms": 0.033799558877944946,
+          "total_ms": 177.98270098865032
+        }
+      }
+    ]
+  },
+  "privacy": "No uploads persisted, no audio/photo sent to Gemma, no raw photos logged; committed images are synthetic fixtures only",
+  "git_excluded": [
+    "models/vision/",
+    "cache/visual/",
+    ".env"
+  ],
+  "reports": [
+    "vision-offline-final.txt",
+    "vision-ui-offline.txt",
+    "vision-prototype.json",
+    "vision-calibration.json",
+    "vision-real.json"
+  ]
+}

@@ -26,7 +26,7 @@ ASSETS = {
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/workspace.webp": ("workspace.webp", "image/webp"),
 }
-CSP = "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+CSP = "default-src 'self'; img-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 
 
 class DemoServer(ThreadingHTTPServer):
@@ -39,7 +39,14 @@ class DemoServer(ThreadingHTTPServer):
         self.listings = read_catalog(self.catalog)
         self.titles = {item["id"]: item["title"] for item in self.catalog}
         self.gateway_slot = BoundedSemaphore(1)
+        self.visual_slot = BoundedSemaphore(1)
+        self.visual_service = None
         super().__init__(("127.0.0.1", port), Handler)
+
+    def server_close(self):
+        if self.visual_service is not None:
+            self.visual_service.close()
+        super().server_close()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -85,6 +92,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"total": total, "cities": list(CITIES.values())})
             except SearchError:
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Каталог временно недоступен."})
+        elif self.path.startswith("/visual-images/"):
+            self._visual_image()
         elif asset and (UI / asset[0]).is_file():
             self._send(HTTPStatus.OK, (UI / asset[0]).read_bytes(), asset[1])
         else:
@@ -98,11 +107,94 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError
         return decode_json(self.rfile.read(size))
 
+    def _visual_image(self):
+        try:
+            from buyer.vision.config import Config, safe_path
+            from buyer.vision.index import manifest_entries
+            config = Config()
+            relative = self.path.removeprefix("/visual-images/")
+            rows, _ = manifest_entries(config, self.server.catalog)
+            if relative not in {row["path"] for row in rows}:
+                raise ValueError
+            path = safe_path(config.visual, relative)
+            mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}[path.suffix.lower()]
+            self._send(HTTPStatus.OK, path.read_bytes(), mime)
+        except Exception:
+            self._json(HTTPStatus.NOT_FOUND, {"error": "Изображение недоступно."})
+
+    def _visual_request(self):
+        # All optional imports live inside this route. Even deleting buyer/vision
+        # leaves startup, catalog, buy, lab and the official CLI untouched.
+        unavailable = {"status": "visual_unavailable", "message":
+            "Визуальный поиск пока недоступен для текущего каталога. Вы можете воспользоваться обычным поиском."}
+        if not self.server.visual_slot.acquire(blocking=False):
+            self.close_connection = True
+            self._json(HTTPStatus.TOO_MANY_REQUESTS, {"status": "visual_busy", "message": "Визуальный поиск занят. Попробуйте чуть позже."})
+            return
+        try:
+            from email.parser import BytesParser
+            from email.policy import default
+            origin = self.headers.get("Origin")
+            if origin and origin not in (f"http://localhost:{self.server.server_port}", f"http://127.0.0.1:{self.server.server_port}"):
+                self.close_connection = True
+                self._json(HTTPStatus.FORBIDDEN, {"status": "invalid_image", "message": "Откройте локальную страницу проекта."})
+                return
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 5 * 1024 * 1024 + 65536:
+                self.close_connection = True
+                self._json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"status": "invalid_image", "message": "Максимальный размер фото — 5 МБ."})
+                return
+            if self.headers.get_content_type() != "multipart/form-data":
+                raise ValueError
+            boundary = self.headers.get_boundary()
+            if not boundary or len(boundary) > 70:
+                raise ValueError
+            deadline = time.monotonic() + 10
+            chunks, remaining = [], size
+            while remaining:
+                timeout = deadline - time.monotonic()
+                if timeout <= 0:
+                    raise ValueError
+                self.connection.settimeout(timeout)
+                chunk = self.rfile.read1(min(remaining, 65536))
+                if not chunk:
+                    raise ValueError
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            payload = b"".join(chunks)
+            self.connection.settimeout(10)
+            message = BytesParser(policy=default).parsebytes(
+                b"Content-Type: " + self.headers["Content-Type"].encode("ascii") + b"\r\nMIME-Version: 1.0\r\n\r\n" + payload)
+            parts = list(message.iter_parts())
+            if message.defects or len(parts) != 1 or parts[0].is_multipart() or parts[0].get_content_disposition() != "form-data" or parts[0].get_param("name", header="content-disposition") != "image":
+                raise ValueError
+            image = parts[0].get_payload(decode=True)
+            if not image or len(image) > 5 * 1024 * 1024:
+                raise ValueError
+            try:
+                from buyer.vision.service import VisualService
+                if self.server.visual_service is None:
+                    self.server.visual_service = VisualService()
+                result = self.server.visual_service.search(image, self.server.catalog)
+            except Exception:
+                result = unavailable
+            self._json(HTTPStatus.BAD_REQUEST if result.get("status") == "invalid_image" else HTTPStatus.OK, result)
+        except (ValueError, UnicodeError, OSError):
+            self.close_connection = True
+            self._json(HTTPStatus.BAD_REQUEST, {"status": "invalid_image", "message": "Выберите один файл JPEG, PNG или WebP размером до 5 МБ."})
+        except Exception:
+            self._json(HTTPStatus.OK, unavailable)
+        finally:
+            self.server.visual_slot.release()
+
     def do_POST(self):
         self._request_started = time.perf_counter()
         self._stages = dict(gemma_ms=0.0, resolve_ms=0.0, search_ms=0.0, total_ms=0.0) if self.path == "/api/buy" else None
         if not self._local_host():
             self._json(HTTPStatus.FORBIDDEN, {"error": "Демо доступно через localhost."})
+            return
+        if self.path == "/api/visual-search":
+            self._visual_request()
             return
         if self.path not in ("/api/buy", "/api/lab"):
             self._json(HTTPStatus.NOT_FOUND, {"error": "Страница не найдена."})

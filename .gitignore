@@ -7,3 +7,8 @@
 *.key
 __pycache__/
 .venv/
+/models/vision/
+/cache/visual/
+/data/visual/queries/private/
+*.onnx
+*.download

@@ -29,8 +29,21 @@
           <div class="eyebrow"><span class="status-dot"></span> ИИ-ПОМОЩНИК ПОКУПАТЕЛЯ</div>
           <h1>Соберите рабочее<br>место под себя.</h1>
           <p>Опишите, что ищете. Комплект подберёт стол, кресло и лампу из учебного каталога в вашем городе.</p>
+          <button class="photo-toggle subtle" id="visual-toggle" type="button" aria-expanded="false" aria-controls="visual-panel">Поиск по фото</button>
         </div>
         <div class="hero-image" role="img" aria-label="Иллюстрация рабочего места со столом, креслом и лампой"></div>
+      </section>
+      <section class="pane visual-panel" id="visual-panel" aria-labelledby="visual-title" hidden>
+        <div class="pane-heading"><div><h2 id="visual-title">Найдите похожий товар</h2><p>Дополнительный режим · не меняет ваш диалог</p></div></div>
+        <div class="visual-upload" id="visual-drop">
+          <label for="visual-file">Выберите фото или перетащите его сюда</label>
+          <input id="visual-file" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="visual-help">
+          <p class="voice-hint" id="visual-help">JPEG, PNG или WebP · до 5 МБ · сторона до 2048 px. Фото обрабатывается локально и не сохраняется. Демонстрационные изображения товаров синтетические.</p>
+          <img id="visual-preview" class="visual-preview" alt="Предпросмотр выбранного фото" hidden>
+          <div class="compose-actions"><button id="visual-remove" class="subtle" type="button" disabled>Удалить фото</button><button id="visual-search" class="primary" type="button" disabled>Найти похожие товары</button></div>
+        </div>
+        <p id="visual-status" class="voice-status" role="status" aria-live="polite">Выберите изображение. Текстовый и голосовой поиск доступны независимо от этого режима.</p>
+        <div id="visual-results" class="option-grid" aria-label="Похожие товары"></div>
       </section>
       <div class="workbench">
         <section class="pane chat" aria-labelledby="conversation-title">

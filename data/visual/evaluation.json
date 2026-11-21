@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "calibration": [
+    {"path": "queries/table.png", "listing_id": "t12"},
+    {"path": "queries/chair.png", "listing_id": "c04"},
+    {"path": "queries/cat.png", "listing_id": null}
+  ],
+  "holdout": [
+    {"path": "queries/lamp.png", "listing_id": "l09"},
+    {"path": "queries/landscape.png", "listing_id": null}
+  ]
+}

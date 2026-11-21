@@ -10,6 +10,7 @@ class Node {
   cloneNode() { return new Node(this.tag); }
   addEventListener(type, callback) { this.handlers[type] = callback; }
   setAttribute(name, value) { this.attributes[name] = value; }
+  removeAttribute(name) { delete this.attributes[name]; delete this[name]; }
   focus() {}
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(n => n !== this); }
   replaceWith(node) { const p = this.parent; const i = p.children.indexOf(this); node.parent = p; p.children[i] = node; }
@@ -22,6 +23,10 @@ function create(speech = 'standard') {
   byId('messages').append(byId('starter'));
   const requests = [];
   const replies = [];
+  const visualRequests = [], visualReplies = [], revokedURLs = [];
+  let objectNumber = 0;
+  class MockFormData { constructor() {this.items = [];} append(...args) {this.items.push(args);} }
+  class MockAbortController { constructor() {this.signal = {aborted: false};} abort() {this.signal.aborted = true;} }
   const recognitions = [];
   class Recognition {
     constructor() { recognitions.push(this); this.starts = 0; this.stops = 0; this.aborts = 0; }
@@ -36,8 +41,15 @@ function create(speech = 'standard') {
   }
   const window = speech === 'none' ? {} : {[speech === 'webkit' ? 'webkitSpeechRecognition' : 'SpeechRecognition']: Recognition};
   const context = vm.createContext({window, document: {getElementById: byId, createElement: tag => new Node(tag)}, Intl,
+    FormData: MockFormData, AbortController: MockAbortController,
+    URL: {createObjectURL: () => 'blob:demo-' + ++objectNumber, revokeObjectURL: url => revokedURLs.push(url)},
     fetch: async (path, options) => {
       if (path === '/api/catalog') return {ok: true, json: async () => ({total: 1, cities: ['Таганрог']})};
+      if (path === '/api/visual-search') {
+        visualRequests.push(options);
+        const result = await visualReplies.shift();
+        return {ok: !result?.httpError, json: async () => result};
+      }
       requests.push(JSON.parse(options.body));
       const body = replies.shift();
       const resolved = await body;
@@ -48,7 +60,8 @@ function create(speech = 'standard') {
     preferences: [], trace: {model: 'offline', prompt_tokens: 1, completion_tokens: 1, elapsed_ms: 1},
     items: {t: {category: 'Стол', category_id: 'table', title: 'Стол', price_rub: 1000, city: 'Таганрог'}}};
   const ok = {...state, response: {status: 'ok', options: [{listing_ids: ['t'], total_rub: 1000, explanation: 'Проверено'}]}};
-  return {byId, context, requests, replies, state, ok, recognitions, window};
+  byId('visual-panel').hidden = true;
+  return {byId, context, requests, replies, state, ok, recognitions, window, visualRequests, visualReplies, revokedURLs};
 }
 async function main() {
   const failures = [];
@@ -311,7 +324,82 @@ async function main() {
     assert.equal(t.byId('query').value, 'Нужен стол');
     assert.equal(t.requests.length, 0);
   });
-  console.log(`Completed ${executed} dialogue and speech scenarios; failures: ${failures.length}`);
+  function choosePhoto(t, files = [{name: 'photo.png', size: 1234, type: 'image/png'}]) {
+    t.byId('visual-file').files = files; t.byId('visual-file').handlers.change(); return files[0];
+  }
+  function photoResult() { return {status: 'ok', message: 'Демонстрационные изображения', coverage: {indexed: 3, total: 250},
+    results: [{rank: 1, listing_id: 't', title: 'Стол', category: 'Стол', city: 'Азов', price_rub: 6500,
+      image_path: 'products/table.png', synthetic: true}]}; }
+  await test('photo mode opens without changing dialogue and stops active dictation', () => {
+    const t = create(); const r = mic(t); r.result([['Стол', true]]);
+    t.byId('visual-toggle').handlers.click(); assert.equal(r.stops, 1); r.end();
+    assert.equal(t.byId('visual-panel').hidden, false);
+    assert.equal(t.byId('query').value, 'Стол'); assert.equal(t.requests.length, 0);
+    assert.equal(vm.runInContext('history.length', t.context), 0);
+  });
+  await test('photo selection creates preview and removal revokes local URL', () => {
+    const t = create(); choosePhoto(t);
+    assert.equal(t.byId('visual-preview').hidden, false); assert.equal(t.byId('visual-search').disabled, false);
+    t.byId('visual-remove').handlers.click();
+    assert.equal(t.revokedURLs.length, 1); assert.equal(t.byId('visual-preview').hidden, true);
+    assert.equal(t.byId('visual-search').disabled, true); assert.equal(t.visualRequests.length, 0);
+  });
+  await test('photo POST is multipart and does not mutate history or normal result fingerprint', async () => {
+    const t = create(); t.replies.push(t.ok); await t.context.submit('Стол');
+    const before = vm.runInContext('JSON.stringify({history,lastOkFingerprint})', t.context);
+    const file = choosePhoto(t); t.visualReplies.push(photoResult());
+    await t.byId('visual-search').handlers.click();
+    assert.equal(t.visualRequests[0].body.items[0][0], 'image');
+    assert.equal(t.visualRequests[0].body.items[0][1], file);
+    assert.equal(t.requests.length, 1);
+    assert.equal(vm.runInContext('JSON.stringify({history,lastOkFingerprint})', t.context), before);
+    assert.equal(t.byId('visual-results').children.length, 1);
+    assert.match(t.byId('visual-status').textContent, /3 из 250/);
+    t.replies.push(t.ok); await t.context.submit('Азов');
+    assert.equal(t.requests[1].messages.length, 3);
+  });
+  await test('unavailable photo search leaves selected file, typed text and speech working', async () => {
+    const t = create(); t.byId('query').value = 'Мой запрос'; choosePhoto(t);
+    t.visualReplies.push({status: 'visual_unavailable', message: 'Визуальный поиск недоступен'});
+    await t.byId('visual-search').handlers.click();
+    assert.match(t.byId('visual-status').textContent, /недоступен/);
+    assert.equal(t.byId('query').value, 'Мой запрос'); assert.equal(t.byId('visual-search').disabled, false);
+    const r = mic(t); r.result([['в Азове', true]]); r.end();
+    assert.equal(t.byId('query').value, 'Мой запрос в Азове');
+  });
+  await test('photo removal aborts pending request and ignores stale results', async () => {
+    const t = create(); choosePhoto(t); let release;
+    t.visualReplies.push(new Promise(resolve => {release = resolve;}));
+    const request = t.byId('visual-search').handlers.click();
+    assert.equal(t.byId('visual-search').disabled, true);
+    t.byId('visual-remove').handlers.click();
+    assert.equal(t.visualRequests[0].signal.aborted, true); release(photoResult()); await request;
+    assert.equal(t.byId('visual-results').children.length, 0);
+    assert.equal(t.byId('visual-search').disabled, true);
+  });
+  await test('drop validates file count, byte size and image dimensions', () => {
+    const t = create();
+    t.byId('visual-drop').handlers.drop({preventDefault() {}, dataTransfer: {files: [{name: 'photo.png', size: 12}]}});
+    assert.equal(t.byId('visual-search').disabled, false);
+    choosePhoto(t, [{size: 6 * 1024 * 1024}]); assert.equal(t.byId('visual-search').disabled, true);
+    choosePhoto(t, [{size: 12}, {size: 12}]); assert.equal(t.byId('visual-search').disabled, true);
+    choosePhoto(t); t.byId('visual-preview').naturalWidth = 2049; t.byId('visual-preview').onload();
+    assert.equal(t.byId('visual-search').disabled, true);
+    assert.match(t.byId('visual-status').textContent, /2048/);
+  });
+  await test('visual mode never renders untrusted remote image URLs', async () => {
+    const t = create(); choosePhoto(t); const response = photoResult();
+    response.results[0].image_path = 'https://untrusted.example/picture.png';
+    t.visualReplies.push(response); await t.byId('visual-search').handlers.click();
+    assert.equal(all(t.byId('visual-results')).some(node => node.tag === 'img'), false);
+  });
+  await test('network failure in photo request leaves normal text submission working', async () => {
+    const t = create(); choosePhoto(t); t.visualReplies.push(Promise.reject(new Error('network')));
+    await t.byId('visual-search').handlers.click();
+    assert.match(t.byId('visual-status').textContent, /обычным поиском/);
+    t.replies.push(t.ok); await t.context.submit('Стол'); assert.equal(t.requests.length, 1);
+  });
+  console.log(`Completed ${executed} dialogue, speech and photo scenarios; failures: ${failures.length}`);
   assert.equal(failures.length, 0, failures.join(', '));
 }
 main().catch(error => {console.error(error.message); process.exitCode = 1;});

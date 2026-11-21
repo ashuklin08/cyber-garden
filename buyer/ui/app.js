@@ -409,3 +409,93 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
   if (catalog) byId("catalog-label").textContent = "Учебный каталог · " +
     catalog.total.toLocaleString("ru-RU") + " объявлений · " + catalog.cities.length + " города";
 }).catch(() => {});
+
+// Optional photo mode owns no dialogue state. Its errors cannot escape into submit().
+(() => {
+  const toggle = byId("visual-toggle"), panel = byId("visual-panel");
+  const input = byId("visual-file"), preview = byId("visual-preview");
+  const search = byId("visual-search"), remove = byId("visual-remove");
+  const status = byId("visual-status"), cards = byId("visual-results");
+  let file = null, objectURL = null, pending = false, controller = null, generation = 0;
+  function controls() { search.disabled = !file || pending; remove.disabled = !file; input.disabled = pending; }
+  function clear() {
+    generation++;
+    controller?.abort(); controller = null; pending = false; file = null;
+    if (objectURL) URL.revokeObjectURL(objectURL);
+    objectURL = null; preview.removeAttribute("src"); preview.hidden = true; input.value = "";
+    preview.onload = preview.onerror = null;
+    cards.replaceChildren(); controls();
+    status.textContent = "Фото удалено. Можно продолжить обычный поиск или выбрать другое изображение.";
+  }
+  function choose(files) {
+    clear();
+    if (!files || files.length !== 1 || !files[0].size || files[0].size > 5 * 1024 * 1024) {
+      status.textContent = "Выберите одно изображение размером до 5 МБ."; return;
+    }
+    try {
+      file = files[0];
+      objectURL = URL.createObjectURL(file);
+      const selectedURL = objectURL;
+      preview.onload = () => {
+        if (objectURL !== selectedURL) return;
+        if (preview.naturalWidth > 2048 || preview.naturalHeight > 2048) {
+          clear(); status.textContent = "Максимальная сторона изображения — 2048 пикселей.";
+        }
+      };
+      preview.onerror = () => {
+        if (objectURL !== selectedURL) return;
+        clear(); status.textContent = "Не удалось прочитать фото. Выберите JPEG, PNG или WebP.";
+      };
+      preview.src = objectURL; preview.hidden = false; controls();
+      status.textContent = "Фото выбрано. Нажмите «Найти похожие товары».";
+    } catch {
+      clear(); status.textContent = "Предпросмотр недоступен. Вы можете воспользоваться обычным поиском.";
+    }
+  }
+  toggle.addEventListener("click", () => {
+    const opening = panel.hidden;
+    panel.hidden = !opening; toggle.setAttribute("aria-expanded", String(opening));
+    if (opening) voiceInput.stop();
+  });
+  input.addEventListener("change", () => choose(input.files));
+  const drop = byId("visual-drop");
+  drop.addEventListener("dragover", event => event.preventDefault());
+  drop.addEventListener("drop", event => { event.preventDefault(); if (!pending) choose(event.dataTransfer.files); });
+  remove.addEventListener("click", clear);
+  search.addEventListener("click", async () => {
+    if (!file || pending) return;
+    const requestGeneration = generation;
+    pending = true; controls(); cards.replaceChildren();
+    status.textContent = "Ищу похожие товары…";
+    try {
+      controller = new AbortController();
+      const body = new FormData(); body.append("image", file);
+      const response = await fetch("/api/visual-search", {method: "POST", body, signal: controller.signal});
+      const result = await response.json();
+      if (generation !== requestGeneration) return;
+      if (!response.ok || result.status !== "ok") {
+        status.textContent = result.message || "Визуальный поиск недоступен. Вы можете воспользоваться обычным поиском.";
+        return;
+      }
+      status.textContent = result.message + " Покрытие каталога: " + result.coverage.indexed + " из " + result.coverage.total + " объявлений.";
+      for (const item of result.results) {
+        const card = element("article", "visual-card");
+        const image = element("img");
+        // Only the demo's allowlisted relative product images can be displayed.
+        if (typeof item.image_path === "string" && /^products\/[a-zA-Z0-9_-]+\.(png|jpe?g|webp)$/.test(item.image_path)) {
+          image.src = "/visual-images/" + item.image_path; image.alt = "Демонстрационное изображение: " + item.title;
+          card.append(image);
+        }
+        card.append(element("h3", null, item.rank + ". " + item.title),
+          element("p", null, item.category + " · " + item.city), element("strong", null, money(item.price_rub)),
+          element("p", null, item.synthetic ? "Синтетическое демо-изображение" : "Демонстрационное изображение"));
+        cards.append(card);
+      }
+    } catch {
+      if (generation === requestGeneration) status.textContent = "Визуальный поиск временно недоступен. Вы можете воспользоваться обычным поиском.";
+    } finally {
+      if (generation === requestGeneration) { pending = false; controller = null; controls(); }
+    }
+  });
+  controls();
+})();
