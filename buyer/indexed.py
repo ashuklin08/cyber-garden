@@ -212,5 +212,5 @@ class SearchProvider:
                     ids = tuple(i.id for i in items)
                     options.append((-sum(scores.get(i, 0) for i in ids), total, ids, items))
             response = {"status":"ok","options":[{"listing_ids":list(ids), "total_rub":t,
-                        "explanation":_explain(items, t, req, preferences)} for _, t, ids, items in sorted(options)[:3]]}
+                        "explanation":_explain(items, t, req)} for _, t, ids, items in sorted(options)[:3]]}
         return Retrieved(Selection(response, counts, baseline.minimum_total_rub), listings, titles, raw["took"])

@@ -85,7 +85,7 @@ def _cheapest(groups, budget):
             heapq.heappush(frontier, (next_total, ids, next_indices))
 
 
-def _explain(items, total, requirements, preferences=()):
+def _explain(items, total, requirements):
     facts = [
         f"{CATEGORIES[item.category]} — {rubles(item.price_rub)}"
         + (f" ({feature.lower()})" if (feature := actual_feature(item)) else "")
@@ -93,13 +93,8 @@ def _explain(items, total, requirements, preferences=()):
     ]
     reserve = requirements.budget_rub - total
     budget_note = f"Запас бюджета {rubles(reserve)}." if reserve else "Ровно в пределах бюджета."
-    from buyer.preferences import dimension
-    purposes = list(dict.fromkeys(pref.text for pref in preferences if dimension(pref) == "purpose"))
-    purpose_note = (" Назначение «" + "», «".join(purposes)
-                    + "» учтено как пожелание. Пригодность для этого использования "
-                    "не подтверждена структурированными характеристиками каталога.") if purposes else ""
     return (f"Самовывоз · {CITIES[requirements.city_id]}. " + ", ".join(facts)
-            + f". Итого {rubles(total)}. {budget_note}" + purpose_note)
+            + f". Итого {rubles(total)}. {budget_note}")
 
 
 def _no_candidates(by_category, unavailable, requirements, catalog_categories=None):
@@ -190,7 +185,7 @@ def select(listings, requirements, preferences=()):
                else _cheapest(groups, requirements.budget_rub))
     options = [
         {"listing_ids": [item.id for item in items], "total_rub": total,
-         "explanation": _explain(items, total, requirements, preferences)}
+         "explanation": _explain(items, total, requirements)}
         for total, items in bundles
     ]
     return Selection({"status": "ok", "options": options}, counts, minimum)

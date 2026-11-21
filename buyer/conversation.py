@@ -7,7 +7,7 @@ from buyer.anchors import WORDS, accessory_context, categories_from_dialog
 from buyer.contracts import Requirements, read_requirements
 from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
                                 TEMPERATURE, WIDTH, Preference, normalize, parse_turn, tighten)
-from buyer.preferences import category_text, evolve, grounded, purpose_wishes
+from buyer.preferences import category_text, evolve, grounded
 
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
              adjustable_height=None, color_temperature_k=[])
@@ -202,7 +202,6 @@ class ConversationManager:
                 continue
             current = read_requirements(values)
             turn = parse_turn(message["text"], pending, current)
-            turn.preferences.extend(purpose_wishes(text, current.categories))
             mentions_product = any(pattern.search(text) for pattern in WORDS.values())
             shopping_signal = (mentions_product or turn.values or turn.preferences or turn.uncertain
                                or SHOPPING_CONTEXT.search(text))
