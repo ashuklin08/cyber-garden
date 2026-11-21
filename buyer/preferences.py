@@ -14,12 +14,34 @@ BEFORE_REJECT = re.compile(r"\b(?:(?:не\s+(?:хочу|нуж\w*|надо)|бе
 AFTER_REJECT = re.compile(r"^\s*(?:\w+\s+){0,3}(?:(?:больше|уже)\s+)?"
                           r"не\s+(?:нуж\w*|важ\w*|хочу|надо)")
 DIMENSIONS = {
+    "purpose": r"для\b|чтобы\b|котор\w*",
     "material": r"дерев\w*|метал\w*|стеклян\w*|пластик\w*|кожан\w*|ткан\w*|текстиль\w*",
     "color": r"красн\w*|син\w*|зелен\w*|бел\w*|черн\w*|сер\w*|желт\w*",
     "softness": r"мягк\w*|жестк\w*",
     "light": r"тепл\w*|холодн\w*",
     "shape": r"углов\w*|прям\w*",
 }
+
+
+def purpose_wishes(text, categories=()):
+    """Keep literal use cases, scoped to the preceding product or sole active category."""
+    text = normalize(text)
+    mentions = sorted((hit.start(), hit.end(), key) for key, pattern in WORDS.items()
+                      for hit in pattern.finditer(text))
+    result = []
+    for hit in re.finditer(r"\b(?:для\s+|чтобы\s+|на\s+котор\w*\s+)", text):
+        previous = [mention for mention in mentions if mention[1] <= hit.start()]
+        owner = previous[-1][2] if previous else (categories[0] if len(categories) == 1 else None)
+        if owner is None:
+            continue
+        # An explicit next product or sentence terminates this product's use case.
+        end = next((start for start, _, _ in mentions if start > hit.start()), len(text))
+        phrase = re.split(r"[,;.!?\n]|\s+и\s+(?=кресл|стол|ламп)|\b(?:покажи|покажите|предложи|бюджет|город)\b",
+                          text[hit.start():end])[0].strip(" ,")
+        phrase = re.sub(r"\s+и$", "", phrase)
+        if 3 < len(phrase) <= 120:
+            result.append(Preference(owner, phrase))
+    return tuple(result)
 
 
 def dimension(pref):
@@ -109,7 +131,11 @@ def grounded(preferences, messages):
             phrase = normalize(pref.text)
             if not phrase or phrase not in text or not tokens(phrase):
                 continue
+            inherited_owner = active[0] if len(active) == 1 else None
             for clause in SPLIT.split(text):
+                clause_categories = [category for category, pattern in WORDS.items() if pattern.search(clause)]
+                if len(clause_categories) == 1:
+                    inherited_owner = clause_categories[0]
                 occurrence = re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", clause)
                 if not occurrence:
                     continue
@@ -117,7 +143,7 @@ def grounded(preferences, messages):
                 mentions = [(min(abs(hit.start() - (position + len(phrase))),
                                  abs(hit.end() - position)), category)
                             for category, pattern in WORDS.items() for hit in pattern.finditer(clause)]
-                owner = min(mentions)[1] if mentions else (active[0] if len(active) == 1 else None)
+                owner = min(mentions)[1] if mentions else inherited_owner
                 quality_owner = {category for category, pattern in QUALITIES.items()
                                  if re.search(pattern, phrase)}
                 if quality_owner and not mentions:
