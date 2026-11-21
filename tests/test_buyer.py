@@ -55,8 +55,14 @@ class InputsTest(unittest.TestCase):
         ]
         body = decode_json(prepare_body(messages, "model"))
         self.assertEqual([item["content"] for item in body["messages"][1:]],
-                         [messages[0]["text"], messages[2]["text"],
-                          messages[3]["text"], messages[4]["text"]])
+                         [messages[3]["text"], messages[4]["text"]])
+        full = decode_json(prepare_body(messages, "model", full_history=True))
+        self.assertEqual([item["content"] for item in full["messages"][1:]],
+                         [message["text"] for message in messages])
+        self.assertLess(len(body["messages"][0]["content"]) * 2,
+                        len(full["messages"][0]["content"]))
+        self.assertEqual(body["max_tokens"], 256)
+        self.assertEqual(full["max_tokens"], 384)
         self.assertLessEqual(body["max_tokens"], 384)
 
     def test_json_rejects_duplicates_nonfinite(self):

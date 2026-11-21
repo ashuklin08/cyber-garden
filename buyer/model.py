@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 from buyer.anchors import categories_from_dialog
 from buyer.contracts import CATEGORIES, CITIES, ROOT, Requirements, decode_json, read_requirements
-from buyer.prompt import SYSTEM
+from buyer.prompt import FAST_SYSTEM, SYSTEM
 from buyer.query_parser import Preference, PROPER_LOCATION
 from buyer.preferences import grounded
 from llm.client import NoRedirect
@@ -89,15 +89,15 @@ def configuration():
 
 def prepare_body(messages, model, *, full_history=False, use_anchors=True):
     anchor = categories_from_dialog(messages)
-    system = SYSTEM
+    system = SYSTEM if full_history else FAST_SYSTEM
     if use_anchors and anchor.categories is not None:
         system += "\nПроверенные словоформы категорий: " + ",".join(anchor.categories) + "."
     conversation = [{"role": "system", "content": system}]
-    last_assistant = len(messages) - 2
+    first_message = 0 if full_history else max(0, len(messages) - 2)
     conversation.extend(
         {"role": message["role"], "content": message["text"]}
         for index, message in enumerate(messages)
-        if full_history or message["role"] == "user" or index == last_assistant
+        if index >= first_message
     )
     if sum(len(message["content"].encode("utf-8")) for message in conversation) > MAX_TEXT_BYTES:
         raise ModelError("История превышает лимит байтов шлюза. Сократите реплики.")
@@ -105,7 +105,7 @@ def prepare_body(messages, model, *, full_history=False, use_anchors=True):
         "model": model,
         "messages": conversation,
         "temperature": 0,
-        "max_tokens": 384,
+        "max_tokens": 384 if full_history else 256,
         "response_format": {"type": "json_object"},
         "stream": False,
         "n": 1,
