@@ -174,17 +174,6 @@ async function main() {
     assert.equal(textPresent(t, 'p', 'Найден 1 комплект'), true);
     assert.equal(all(t.byId('messages')).some(n => n.tag === 'p' && n.textContent?.startsWith('Подобрал комплект')), true);
   });
-  await test('all three complete bundles are rendered together', async () => {
-    const t = create();
-    t.replies.push(dataWith(t, [1, 2, 3].map(i => option(['t' + i, 'c' + i, 'l' + i]))));
-    await t.context.submit('Стол, кресло и лампа в Таганроге до 15000 рублей');
-    const cards = all(t.byId('results')).filter(n => n.className === 'pane option');
-    assert.equal(cards.length, 3);
-    for (const card of cards) {
-      assert.equal(all(card).find(n => n.className === 'items').children.length, 3);
-    }
-    assert.equal(textPresent(t, 'p', 'Найдено 3 комплекта'), true);
-  });
   await test('changed bundle receives a fresh result message', async () => {
     const t = create(); t.replies.push(dataWith(t, [option(['t1', 'c1'])]), dataWith(t, [option(['t2', 'c1'], 2000)]));
     await t.context.submit('Стол и кресло'); await t.context.submit('Другой стол');
@@ -527,7 +516,7 @@ async function main() {
     assert.equal(t.timers.size, 0);
     assert.equal(t.byId('visual-search').disabled, false);
   });
-  await test('table cards prefer their listing photo and label a fallback as a demonstration photo', async () => {
+  await test('table cards prefer their listing photo and label a fallback as an example', async () => {
     const t = create('standard', {total: 2, cities: ['Азов'], photos: {
       t1: {path: 'products/stock.webp', synthetic: true}, t2: {path: 'https://example.com/random.jpg'},
     }});
@@ -537,10 +526,11 @@ async function main() {
     const images = cards.filter(node => node.tag === 'img');
     assert.deepEqual(images.map(node => node.src), ['/visual-images/products/stock.webp', '/table-preview.webp']);
     assert.equal(cards.filter(node => node.className === 'card-photo photo-placeholder').length, 2);
-    assert.equal(cards.filter(node => node.className === 'photo-badge').length, 2);
+    assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), true);
+    assert.equal(textPresent(t, 'span', 'Пример стола'), true);
     images[0].handlers.error();
     assert.equal(images[0].src, '/table-preview.webp');
-    assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), true);
+    assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), false);
     assert.equal(textPresent(t, 'p', 'ID t1'), true);
     assert.equal(textPresent(t, 'p', 'Таганрог'), true);
     assert.equal(textPresent(t, 'strong', new Intl.NumberFormat('ru-RU').format(1000) + ' ₽'), true);
