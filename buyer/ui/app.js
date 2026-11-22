@@ -241,7 +241,7 @@ function productPhoto(container, item, photo, preview = null) {
   const badge = element("span", "photo-badge");
   let usingPreview = !hasPhoto;
   function show() {
-    const label = usingPreview ? "Пример стола" : photo.synthetic ? "Демонстрационное фото" : "";
+    const label = usingPreview || photo.synthetic ? "Демонстрационный вариант" : "";
     image.alt = usingPreview ? label : label ? label + ": " + item.title : item.title;
     if (label) {
       if (!badge.textContent) container.append(badge);

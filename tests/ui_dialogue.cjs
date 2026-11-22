@@ -526,11 +526,10 @@ async function main() {
     const images = cards.filter(node => node.tag === 'img');
     assert.deepEqual(images.map(node => node.src), ['/visual-images/products/stock.webp', '/table-preview.webp']);
     assert.equal(cards.filter(node => node.className === 'card-photo photo-placeholder').length, 2);
-    assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), true);
-    assert.equal(textPresent(t, 'span', 'Пример стола'), true);
+    assert.equal(cards.filter(node => node.className === 'photo-badge' && node.textContent === 'Демонстрационный вариант').length, 2);
     images[0].handlers.error();
     assert.equal(images[0].src, '/table-preview.webp');
-    assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), false);
+    assert.equal(textPresent(t, 'span', 'Демонстрационный вариант'), true);
     assert.equal(textPresent(t, 'p', 'ID t1'), true);
     assert.equal(textPresent(t, 'p', 'Таганрог'), true);
     assert.equal(textPresent(t, 'strong', new Intl.NumberFormat('ru-RU').format(1000) + ' ₽'), true);

@@ -68,6 +68,9 @@ SPACED_TEMPERATURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s+(?P<u>{TEMP_UNIT
 RANGE_START = re.compile(rf"{NUM_START}(?P<n>{NUMBER})\s*(?:до|[-–—])\s*$")
 MONEY_UNIT = r"миллион\w*|млн\.?|тыс(?:яч\w*)?\.?|[кk]|₽|руб(?:л\w*)?\.?"
 MONEY = re.compile(rf"(?<![\w-])(?P<n>{NUMBER})(?:\s*(?P<u>{MONEY_UNIT})(?!\w))?")
+SHORT_BUDGET_REPLY = re.compile(
+    rf"(?:давай(?:те)?|тогда|пусть будет|можно)\s+(?:до\s+)?{NUMBER}"
+    rf"(?:\s*(?:{MONEY_UNIT}))?\s*[.!?]*")
 BARE_MEASURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})(?P<u>)")
 PLAIN_MEASURE = re.compile(rf"(?:(?:{'|'.join(pattern for _, pattern in OPERATIONS)})\s+|"
                           rf"[<>=≤≥]+\s*)?{NUMBER}\s*[.!?]*")
@@ -345,7 +348,12 @@ def parse_turn(message, pending, current):
                 spans.extend((offset + hit.start(), offset + hit.end()) for hit in bare)
                 turn.uncertain.add(attr)
                 turn.ambiguous_attributes.add(attr)
-    budget = _budget(text, spans, "budget_rub" in pending, current.budget_rub is None)
+    # A short amount can revise an existing shopping request, but must not
+    # steal a number from an unanswered width/temperature/city question.
+    conversational_budget = bool(current.categories and pending <= {"budget_rub"}
+                                 and SHORT_BUDGET_REPLY.fullmatch(text))
+    budget = _budget(text, spans, "budget_rub" in pending or conversational_budget,
+                     current.budget_rub is None)
     if budget.preference and len(budget.preference) <= 120:
         turn.preferences.append(Preference(None, budget.preference, "budget_rub"))
     if budget.amount is not None:
