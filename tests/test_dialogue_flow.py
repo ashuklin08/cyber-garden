@@ -116,6 +116,30 @@ class DialogueFlowTest(unittest.TestCase):
             self.assertEqual(sum(r["price_rub"] for r in records), option["total_rub"])
             self.assertLessEqual(option["total_rub"], budget)
 
+    def test_new_bundle_updates_panel_and_results_even_with_stale_model(self):
+        initial = "Стол шириной до 90 см и кресло. Таганрог. Бюджет 13000 рублей."
+        self.reply = FACTS | {"categories": ["table", "chair"], "budget_rub": 13000,
+                               "width_cm": [["lte", 90]], "preferences": []}
+        first = self.post(dialog(initial))
+        self.assertEqual(first["requirements"][1]["value"], 13000)
+        self.assertIn("Ширина стола", [row["label"] for row in first["requirements"]])
+
+        for update in ("Теперь стул и лампу за 4800", "Стул и лампу за 4800",
+                       "Подбери комплект из кресла и лампы за 4 800 ₽"):
+            with self.subTest(update=update):
+                history = dialog(initial, "Подобрал комплект.", update)
+                body = self.post(history)
+                self.assert_options(body["response"], ("chair", "lamp"), budget=4800)
+                self.assertEqual(body["requirements"], [
+                    {"label": "Город самовывоза", "value": "Таганрог"},
+                    {"label": "Бюджет", "value": 4800},
+                    {"label": "Состав", "value": "Кресло, Лампа"},
+                ])
+                continued = self.post(dialog(initial, "Подобрал комплект.", update,
+                                             "Подобрал другой комплект.", "Покажи варианты"))
+                self.assertEqual(continued["requirements"], body["requirements"])
+                self.assert_options(continued["response"], ("chair", "lamp"), budget=4800)
+
     def test_off_topic_preserves_state_and_resume_works_through_web(self):
         first = self.post(dialog(BASE))
         self.assert_options(first["response"], FACTS["categories"])

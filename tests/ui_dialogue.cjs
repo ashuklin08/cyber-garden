@@ -181,6 +181,24 @@ async function main() {
     assert.equal(texts.at(-1).startsWith('Подобрал комплект'), true);
     assert.equal(texts.at(-1).includes('не изменились'), false);
   });
+  await test('search conditions show the latest response alongside the new bundle', async () => {
+    const t = create();
+    const rows = (budget, composition) => [
+      {label: 'Город самовывоза', value: 'Таганрог'},
+      {label: 'Бюджет', value: budget},
+      {label: 'Состав', value: composition},
+    ];
+    const displayed = () => all(t.byId('evidence')).filter(node => node.tag === 'dd')
+      .map(node => node.textContent);
+    const rubles = (value) => new Intl.NumberFormat('ru-RU').format(value) + ' ₽';
+    t.replies.push({...dataWith(t, [option(['t1', 'c1'])]),
+      requirements: [...rows(13000, 'Стол, Кресло'), {label: 'Ширина стола', value: '≤ 90 см'}]},
+    {...dataWith(t, [option(['c1', 'l1'])]), requirements: rows(4800, 'Кресло, Лампа')});
+    await t.context.submit('Стол и кресло за 13000');
+    assert.deepEqual(displayed(), ['Таганрог', rubles(13000), 'Стол, Кресло', '≤ 90 см']);
+    await t.context.submit('Теперь стул и лампу за 4800');
+    assert.deepEqual(displayed(), ['Таганрог', rubles(4800), 'Кресло, Лампа']);
+  });
   await test('unchanged results name goods and bundles separately', async () => {
     for (const [ids, noun] of [[['t1'], 'товары'], [['t1', 'c1', 'l1'], 'комплекты']]) {
       const t = create(); const data = dataWith(t, [option(ids)]); t.replies.push(data, data);

@@ -3,10 +3,10 @@
 import re
 from dataclasses import dataclass, replace
 
-from buyer.anchors import WORDS, accessory_context, categories_from_dialog
+from buyer.anchors import ADD, WORDS, accessory_context, categories_from_dialog
 from buyer.contracts import CATEGORIES, CITIES, Requirements, read_requirements
 from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
-                                CITY_CLEAR, PROPER_LOCATION, PURCHASE_REQUEST, RELATIVE_BUDGET,
+                                CITY_CLEAR, PURCHASE_REQUEST, RELATIVE_BUDGET, location_mentions,
                                 TEMPERATURE, WIDTH, MEASURE, PRICE_PER_ITEM,
                                 unsupported_measurement, Preference, normalize, parse_turn, single_item_quote, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
@@ -71,6 +71,8 @@ TOTAL_ANSWER = re.compile(r"(?:общий(?: бюджет)?|бюджет|(?:на
 REPEAT_SEARCH = re.compile(r"(?:(?:давай(?:те)?|тогда)\s+)?(?:покажи(?:те)?|выведи|показывай)"
                            r"(?:\s+(?:мне|тогда))?\s+(?:варианты|результаты)\s*[.!?]*")
 COMPOSITION_CONTEXT = re.compile(r"\b(?:комплект\w*|добав\w*|плюс|также|еще|не|без)\b")
+NEW_COMPOSITION = re.compile(r"^(?:а\s+)?(?:теперь|хочу|нуж(?:ен|на|ны|но))\b")
+REMOVE_COMPOSITION = re.compile(r"\b(?:убери|исключи|удали|вычеркни|без|не\s+(?:нуж\w*|хочу))\b")
 
 
 _THOUSAND_TYPO = re.compile(
@@ -487,7 +489,8 @@ class ConversationManager:
                 needs_model = True
                 pending = set()
                 continue
-            if not single_search and _unscoped_price(text):
+            if (not single_search and (turn.single_purchase or "budget_rub" not in turn.values)
+                    and _unscoped_price(text)):
                 turn_issue = "chair_price" if re.search(r"\bстул\w*\b", text) else "price"
                 turn.values.pop("budget_rub", None)
                 turn.uncertain.discard("budget_rub")
@@ -498,16 +501,19 @@ class ConversationManager:
             switching_product |= bool(
                 current.categories and re.search(r"\bподыщи\b", composition)
                 and not re.search(r"\b(?:еще|добавь|также)\b", composition))
-            new_search = (not turn_issue and PURCHASE_REQUEST.search(text)
-                          and not COMPOSITION_CONTEXT.search(text))
+            purchase = PURCHASE_REQUEST.search(text)
+            new_search = not turn_issue and purchase and not COMPOSITION_CONTEXT.search(text)
+            new_bundle = (not turn_issue and not ADD.search(text) and not REMOVE_COMPOSITION.search(text)
+                          and (purchase or "budget_rub" in turn.values or NEW_COMPOSITION.search(text)))
             replacement = (categories_from_dialog([{"role": "user", "text": composition}]).categories
-                           if new_search or switching_product else None)
-            single_search |= bool(new_search and replacement and len(replacement) == 1)
+                           if new_search or new_bundle or switching_product else None)
+            replace_search = single_search or bool(replacement and (new_search or
+                                                                    new_bundle and len(replacement) > 1))
             composition_history.append({"role": "user", "text": composition})
-            if single_search:
+            if replace_search or (switching_product and replacement):
                 composition_history = composition_history[-1:]
             anchor = categories_from_dialog(composition_history)
-            recognized, categories = _category_update(composition, () if single_search else current.categories,
+            recognized, categories = _category_update(composition, () if replace_search else current.categories,
                                                        "categories" in pending)
             if semantic_refusal and recognized and categories:
                 semantic_refusal = False
@@ -682,7 +688,7 @@ class ConversationManager:
             location = location or dict(name=raw_city, type="city", city_id=raw_city)
             model = replace(model, requirements=replace(model.requirements, city_id=None))
         elif (location is None and raw_city and "city_id" in local.unresolved
-              and PROPER_LOCATION.search(last) and not CITIES_RE[raw_city].search(normalize(last))):
+              and any(location_mentions(last)) and not CITIES_RE[raw_city].search(normalize(last))):
             # A new location cue needs semantic evidence before reusing a city.
             model = replace(model, requirements=replace(model.requirements, city_id=None))
         if (location and location.get("type") in {"uncertain", "other"}

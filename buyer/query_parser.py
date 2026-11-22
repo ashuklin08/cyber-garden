@@ -6,7 +6,7 @@ from bisect import bisect_right
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
-from buyer.anchors import AMBIGUOUS, WORDS
+from buyer.anchors import ADD, AMBIGUOUS, WORDS
 from buyer.contracts import CITIES, FEATURES
 
 CORE = ("city_id", "budget_rub", "categories")
@@ -108,6 +108,7 @@ PROPER_LOCATION = re.compile(
     r"\b(?:(?:в|из)\s+(?:городе\s+)?|город(?:е)?\s+)"
     r"(?!(?:бюджете|идеале|наличии|хорошем\s+состоянии|отличном\s+состоянии)\b)"
     r"(?P<name>[а-яё][а-яё-]+)", re.I)
+BUNDLE_CONTENTS = re.compile(r"\b(?:комплект|набор)\w*\s+$", re.I)
 CITY_CLEAR = re.compile(r"\b(?:город\s+(?:не\s*важ\w*|не\s+принципиал\w*|не\s+имеет\s+значения|люб\w*)|"
                         r"любой\s+город|без\s+привязки\s+к\s+городу)\b")
 CITY_ONLY_REPLY = re.compile(r"(?:нет[ ,]+)?(?:(?:тогда|теперь|давай|давайте)\s+)?"
@@ -167,6 +168,13 @@ def normalize(text):
     text = unicodedata.normalize("NFKC", text).lower().replace("ё", "е")
     text = re.sub(r"\bневажно\b", "не важно", text)
     return re.sub(r"[^\S\n]+", " ", text).strip()
+
+
+def location_mentions(text):
+    for mention in PROPER_LOCATION.finditer(text):
+        if mention[0].lower().startswith("из ") and BUNDLE_CONTENTS.search(text[:mention.start()]):
+            continue
+        yield mention
 
 
 def _decimal(value):
@@ -263,10 +271,17 @@ def _budget(text, numeric_spans, prompted, first):
         if re.match(r"\s*(?:[$€]|usd\b|eur\b|доллар\w*\b|евро\b)", suffix):
             return BudgetReading(uncertain=True)
         op = _operator(text[max(0, start - 40):start], None)
-        if _categories(clause) and not BUDGET_WORD.search(clause) and op is None:
+        item_list = clause[:start - boundaries[index]]
+        bundle_price = (len(candidates) == 1 and len(_categories(item_list)) > 1
+                        and re.search(r"\bи\b", item_list)
+                        and re.search(r"\bза\s+$", item_list)
+                        and not ADD.search(text) and not ALTERNATIVE.search(clause)
+                        and (unit or re.fullmatch(r"\s*[.!?]*", suffix)
+                             or PROPER_LOCATION.match(suffix.lstrip(" ,"))))
+        if _categories(clause) and not BUDGET_WORD.search(clause) and op is None and not bundle_price:
             # Currency alone does not tell us whether this is an item's price.
             continue
-        if unit or explicit or prompted:
+        if unit or explicit or prompted or bundle_price:
             if not explicit and _categories(prefix) and _categories(suffix):
                 return BudgetReading(uncertain=True)
             if SOFT.search(clause) and not re.search(r"\b(?:строго|предел|обязательн\w*)\b", clause):
@@ -369,7 +384,7 @@ def parse_turn(message, pending, current):
         city_pattern = CITIES_RE[turn.values["city_id"]]
         if CITY_ONLY_REPLY.fullmatch(city_pattern.sub("", text)):
             turn.needs_model = False
-    elif city_hits or CITY_CHANGE.search(text) or PROPER_LOCATION.search(message) or "city_id" in pending:
+    elif city_hits or CITY_CHANGE.search(text) or any(location_mentions(text)) or "city_id" in pending:
         if len(city_hits) > 1 and ALTERNATIVE.search(text):
             turn.values["city_id"] = None
         else:

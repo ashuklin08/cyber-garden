@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from buyer.anchors import categories_from_dialog
 from buyer.contracts import CATEGORIES, CITIES, ROOT, Requirements, decode_json, read_requirements
 from buyer.prompt import FAST_SYSTEM, SYSTEM
-from buyer.query_parser import Preference, PROPER_LOCATION
+from buyer.query_parser import Preference, location_mentions
 from buyer.preferences import grounded
 from llm.client import NoRedirect
 
@@ -232,7 +232,7 @@ def extract(messages, *, full_history=False, use_anchors=True):
             if not 0 < len(raw_city) <= 120:
                 raise ValueError("Invalid city ID")
             if location is None or location["type"] != "city":
-                mentions = list(PROPER_LOCATION.finditer(messages[-1]["text"]))
+                mentions = list(location_mentions(messages[-1]["text"]))
                 location = (dict(name=mentions[-1]["name"], type="city", city_id=None)
                             if mentions else None)
             extracted["city_id"] = None
