@@ -1,4 +1,5 @@
 """Real HTTP routing and graceful failures; inference is explicitly stubbed here."""
+from base64 import b64decode
 import builtins
 from http.client import HTTPConnection
 import json
@@ -69,12 +70,61 @@ class VisionApiTest(unittest.TestCase):
         with patch("builtins.__import__", side_effect=blocked):
             status, result = self.request()
             self.assertEqual((status, result["status"]), (200, "visual_unavailable"))
-            status, _ = self.request("/api/catalog", b"", method="GET")
+            status, catalog = self.request("/api/catalog", b"", method="GET")
             self.assertEqual(status, 200)
+            self.assertEqual(catalog["photos"], {})
             with patch("buyer.demo.extract", return_value=(ModelQuery(expected(city_id="taganrog", budget_rub=5000, categories=["table"]), ()), ModelTrace("mock", 1, 1, 1))):
                 status, result = self.request("/api/buy", json.dumps(dict(messages=[dict(role="user", text="Стол в Таганроге, бюджет 5000 рублей")])).encode(), {"Content-Type": "application/json"})
             self.assertEqual(status, 200)
             self.assertEqual(result["response"]["status"], "ok")
+
+    def test_catalog_photo_metadata_only_maps_current_listing_ids(self):
+        from buyer.vision.config import Config
+        visual = Path(self.temp.name) / "visual"
+        (visual / "products").mkdir(parents=True)
+        product_path = "products/stock.png"
+        sample = b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII=")
+        (visual / product_path).write_bytes(sample)
+        (visual / "manifest.json").write_text(json.dumps({"version": 1, "images": [
+            {"listing_id": "real-id", "path": product_path, "synthetic": True},
+            {"listing_id": "retired-id", "path": "products/retired.webp", "synthetic": True},
+        ]}))
+        with patch("buyer.vision.config.Config", return_value=Config(visual=visual)):
+            status, result = self.request("/api/catalog", b"", method="GET")
+            self.assertEqual(status, 200)
+            self.assertEqual(result["total"], 1)
+            self.assertEqual(result["photos"], {"real-id": {"path": product_path, "synthetic": True}})
+            connection = HTTPConnection("127.0.0.1", self.server.server_port, timeout=15)
+            try:
+                connection.request("GET", "/visual-images/" + product_path)
+                response = connection.getresponse()
+                self.assertEqual((response.status, response.getheader("Content-Type")), (200, "image/png"))
+                self.assertEqual(response.read(), sample)
+            finally:
+                connection.close()
+            stale_status, _ = self.request("/visual-images/products/retired.webp", b"", method="GET")
+            self.assertEqual(stale_status, 404)
+        self.assertIsNone(self.server.visual_setup)
+
+    def test_python_demo_serves_new_frontend_without_preparing_vision(self):
+        connection = HTTPConnection("127.0.0.1", self.server.server_port, timeout=15)
+        try:
+            for path, mime, marker in (
+                ("/", "text/html", 'id="visual-panel"'),
+                ("/styles.css", "text/css", "avito-orbit"),
+                ("/app.js", "javascript", 'post("/api/buy"'),
+            ):
+                connection.request("GET", path)
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertIn(mime, response.getheader("Content-Type"))
+                source = response.read().decode("utf-8")
+                self.assertIn(marker, source)
+                for demo in ("DEMO_SNAPSHOT", "loadDemoShowcase", "PHOTO_POOL", "images.unsplash.com"):
+                    self.assertNotIn(demo, source)
+        finally:
+            connection.close()
+        self.assertIsNone(self.server.visual_setup)
 
     def test_model_exception_is_a_controlled_visual_response(self):
         self.server.visual_service = Mock()

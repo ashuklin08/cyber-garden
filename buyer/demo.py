@@ -94,7 +94,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 provider = self.server.provider
                 total = provider.cluster.call(provider.index + "/_count")["count"] if provider else len(self.server.listings)
-                self._json(HTTPStatus.OK, {"total": total, "cities": list(CITIES.values())})
+                self._json(HTTPStatus.OK, {"total": total, "cities": list(CITIES.values()),
+                                           "photos": self._catalog_photos()})
             except SearchError:
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Каталог временно недоступен."})
         elif self.path.startswith("/visual-images/"):
@@ -115,6 +116,18 @@ class Handler(BaseHTTPRequestHandler):
         if not 0 < size <= 65_536:
             raise ValueError
         return decode_json(self.rfile.read(size))
+
+    def _catalog_photos(self):
+        if self.server.provider:
+            return {}
+        try:
+            from buyer.vision.config import Config
+            from buyer.vision.index import manifest_entries
+            rows, _ = manifest_entries(Config(), self.server.catalog)
+            return {row["listing_id"]: {"path": row["path"], "synthetic": row["synthetic"]}
+                    for row in rows}
+        except Exception:
+            return {}
 
     def _visual_image(self):
         try:

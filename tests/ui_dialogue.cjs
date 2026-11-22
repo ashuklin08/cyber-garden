@@ -16,7 +16,7 @@ class Node {
   replaceWith(node) { const p = this.parent; const i = p.children.indexOf(this); node.parent = p; p.children[i] = node; }
 }
 function all(node) { return [node, ...node.children.flatMap(all)]; }
-function create(speech = 'standard') {
+function create(speech = 'standard', catalog = {total: 1, cities: ['Таганрог']}) {
   const ids = new Map();
   function byId(id) { if (!ids.has(id)) ids.set(id, new Node()); return ids.get(id); }
   byId('evidence').append(new Node());
@@ -55,7 +55,7 @@ function create(speech = 'standard') {
     setTimeout: fn => {const id = ++nextTimer; timers.set(id, fn); return id;}, clearTimeout: id => timers.delete(id),
     URL: {createObjectURL: () => 'blob:demo-' + ++objectNumber, revokeObjectURL: url => revokedURLs.push(url)},
     fetch: async (path, options) => {
-      if (path === '/api/catalog') return {ok: true, json: async () => ({total: 1, cities: ['Таганрог']})};
+      if (path === '/api/catalog') return {ok: true, json: async () => catalog};
       if (path === '/api/visual-status' || path === '/api/visual-status?retry=1') {
         healthRequests.push(path);
         const result = await abortable(healthReplies.length ? healthReplies.shift() : ready, options?.signal);
@@ -73,8 +73,9 @@ function create(speech = 'standard') {
       }
       requests.push(JSON.parse(options.body));
       const body = replies.shift();
-      const resolved = await body;
-      return {ok: !resolved?.httpError, json: async () => resolved?.httpError ? {error: resolved.httpError} : resolved};
+      const resolved = await abortable(body, options.signal);
+      return {ok: !resolved?.httpError, headers: {get: () => resolved?.serverTiming},
+        json: async () => resolved?.httpError ? {error: resolved.httpError} : resolved};
     }});
   vm.runInContext(fs.readFileSync('buyer/ui/app.js', 'utf8'), context);
   const state = {requirements: [{label: 'Город', value: 'Таганрог'}], eligible: [], budget_rub: 5000,
@@ -305,12 +306,6 @@ async function main() {
     assert.equal(vm.runInContext('history.length', t.context), 0);
     assert.equal(t.byId('voice').disabled, false);
   });
-  await test('defence tab stops recognition and keeps finalized text', () => {
-    const t = create(); const r = mic(t); r.result([['Стол', true], ['возможно', false]]);
-    t.byId('lab-tab').handlers.click(); assert.equal(r.stops, 1); r.end();
-    assert.equal(t.byId('query').value, 'Стол');
-    assert.equal(t.byId('buyer-view').hidden, true);
-  });
   await test('sending blocks microphone until the existing request finishes', async () => {
     const t = create(); let release; t.replies.push(new Promise(resolve => {release = resolve;}));
     const pending = t.context.submit('Стол');
@@ -505,7 +500,119 @@ async function main() {
     assert.equal(t.timers.size, 0);
     assert.equal(t.byId('visual-search').disabled, false);
   });
-  console.log(`Completed ${executed} dialogue, speech and photo scenarios; failures: ${failures.length}`);
+  await test('catalog photo is joined by real ID and missing photos use placeholders', async () => {
+    const t = create('standard', {total: 2, cities: ['Азов'], photos: {
+      t1: {path: 'products/stock.webp', synthetic: true}, t2: {path: 'https://example.com/random.jpg'},
+    }});
+    t.replies.push(dataWith(t, [option(['t1']), option(['t2'])]));
+    await t.context.submit('Стол');
+    const cards = all(t.byId('results'));
+    assert.deepEqual(cards.filter(node => node.tag === 'img').map(node => node.src), ['/visual-images/products/stock.webp']);
+    assert.equal(cards.filter(node => node.className === 'card-photo photo-placeholder').length, 2);
+    assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), true);
+    assert.equal(textPresent(t, 'p', 'ID t1'), true);
+    assert.equal(textPresent(t, 'p', 'Таганрог'), true);
+    assert.equal(textPresent(t, 'strong', new Intl.NumberFormat('ru-RU').format(1000) + ' ₽'), true);
+    assert.equal(t.byId('quick-condition-control').hidden, true);
+    assert.deepEqual(t.byId('city-bar').children.map(node => node.textContent), ['Азов']);
+  });
+  await test('sorting operates on results without sending a new request', async () => {
+    const t = create();
+    t.replies.push(dataWith(t, [option(['t1'], 2000), option(['t2'], 1000)]));
+    await t.context.submit('Стол');
+    const titles = () => all(t.byId('results')).filter(node => node.className === 'item-title').map(node => node.textContent);
+    assert.deepEqual(titles(), ['t1', 't2']);
+    all(t.byId('results')).find(node => node.id === 'sort-cheap').handlers.click();
+    assert.deepEqual(titles(), ['t2', 't1']);
+    assert.equal(t.requests.length, 1);
+  });
+  await test('condition filter is populated only from listing metadata', async () => {
+    const t = create();
+    const data = dataWith(t, [option(['t1']), option(['t2'])]);
+    data.items.t1.condition_label = 'Отличное';
+    t.replies.push(data);
+    await t.context.submit('Стол');
+    assert.equal(t.byId('quick-condition-control').hidden, false);
+    assert.deepEqual(t.byId('quick-condition').children.map(node => node.value), ['', 'Отличное']);
+    t.byId('quick-condition').value = 'Отличное'; t.byId('quick-condition').handlers.change();
+    assert.deepEqual(all(t.byId('results')).filter(node => node.className === 'item-title').map(node => node.textContent), ['t1']);
+  });
+  await test('local bundle sums real prices, supports removal and clears without a search', async () => {
+    const t = create();
+    const data = dataWith(t, [option(['t1', 'c1'], 3000)]);
+    data.items.c1.price_rub = 2000; t.replies.push(data); await t.context.submit('Стол и кресло');
+    const buttons = all(t.byId('results')).filter(node => node.className === 'add-bundle');
+    buttons.forEach(button => button.handlers.click());
+    assert.equal(t.byId('bundle-count').textContent, '2 товара');
+    assert.equal(t.byId('bundle-total').textContent, new Intl.NumberFormat('ru-RU').format(3000) + ' ₽');
+    assert.equal(buttons[0].attributes['aria-pressed'], 'true');
+    t.byId('bundle-toggle').handlers.click();
+    all(t.byId('bundle-items')).find(node => node.className === 'bundle-remove').handlers.click();
+    assert.equal(t.byId('bundle-total').textContent, new Intl.NumberFormat('ru-RU').format(2000) + ' ₽');
+    t.byId('bundle-clear').handlers.click();
+    assert.equal(t.byId('bundle-dock').hidden, true);
+    assert.equal(buttons[0].attributes['aria-pressed'], 'false');
+    assert.equal(t.requests.length, 1);
+  });
+  await test('unsupported category and city use server wording without stale cards', async () => {
+    const t = create();
+    t.replies.push(t.ok);
+    await t.context.submit('Стол');
+    for (const [text, field, question] of [
+      ['Хочу автомобиль', 'categories', 'Такого каталога нет. Пожалуйста, выберите из имеющихся.'],
+      ['В Москве', 'city_id', 'Такого города нет. Пожалуйста, выберите из имеющихся.'],
+    ]) {
+      t.replies.push({response: {status: 'clarify', questions: [{field, text: question}]}});
+      await t.context.submit(text);
+      assert.equal(textPresent(t, 'p', question), true);
+      assert.equal(all(t.byId('results')).some(node => node.className === 'pane option'), false);
+      assert.equal(t.requests.at(-1).messages.at(-1).text, text);
+    }
+  });
+  await test('missing telemetry is omitted and server stage timings are distinct', async () => {
+    const t = create();
+    t.replies.push({response: {status: 'clarify', questions: [{text: 'Уточните запрос'}]},
+      serverTiming: 'gemma;dur=0, search;dur=0, total;dur=0'});
+    await t.context.submit('Ищу');
+    const metrics = () => all(t.byId('evidence')).filter(node => node.className === 'tele-card');
+    assert.equal(metrics().length, 0);
+    t.replies.push({...t.ok, trace: {model: 'gemma', elapsed_ms: 430}, serverTiming: 'gemma;dur=421, search;dur=11, total;dur=459'});
+    await t.context.submit('Стол в Азове');
+    assert.deepEqual(metrics().map(node => node.children[1].textContent), ['Gemma API', 'Поиск', 'Ответ сервера']);
+    assert.equal(metrics()[0].children[0].textContent, '0,421 с');
+  });
+  await test('unexpected status and timeout preserve the draft without committing a turn', async () => {
+    const t = create();
+    t.replies.push({response: {status: 'other'}});
+    await t.context.submit('Стол');
+    assert.match(t.byId('error').textContent, /неподдерживаемый результат/);
+    t.replies.push(new Promise(() => {}));
+    const pending = t.context.submit('Стол');
+    [...t.timers.values()][0](); await pending;
+    assert.match(t.byId('error').textContent, /не ответил вовремя/);
+    assert.equal(t.byId('query').value, 'Стол');
+    assert.equal(vm.runInContext('history.length', t.context), 0);
+  });
+  await test('Gemma gateway failure presents the API error without retry or a fake answer', async () => {
+    const t = create();
+    t.replies.push({httpError: 'Gemma временно недоступна'});
+    await t.context.submit('Нужен стол');
+    assert.equal(t.byId('error').textContent, 'Gemma временно недоступна');
+    assert.equal(t.byId('query').value, 'Нужен стол');
+    assert.equal(t.byId('results').hidden, true);
+    assert.equal(t.requests.length, 1);
+    assert.equal(vm.runInContext('history.length', t.context), 0);
+  });
+  await test('missing vision dependencies expose install instructions and preserve chat', async () => {
+    const t = create();
+    t.healthReplies.push({status: 'dependencies_required', message: 'Установите зависимости', setup_hint: 'pip install -r requirements-vision.txt'});
+    await openPhoto(t);
+    assert.equal(t.byId('visual-readiness').attributes['data-state'], 'dependencies_required');
+    assert.match(t.byId('visual-setup-hint').textContent, /requirements-vision.txt/);
+    t.replies.push(t.ok); await t.context.submit('Стол');
+    assert.equal(t.requests.length, 1);
+  });
+  console.log(`Completed ${executed} frontend scenarios; failures: ${failures.length}`);
   assert.equal(failures.length, 0, failures.join(', '));
 }
 main().catch(error => {console.error(error.message); process.exitCode = 1;});

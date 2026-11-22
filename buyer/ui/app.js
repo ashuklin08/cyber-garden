@@ -38,6 +38,7 @@ const voiceInput = (() => {
     const title = recording ? "Остановить запись" : "Голосовой ввод";
     button.setAttribute("aria-label", title);
     label.textContent = title;
+    button.title = title;
     send.disabled = busy || session !== null;
   }
   function render(current, interim) {
@@ -129,14 +130,27 @@ function element(tag, className, text) {
 }
 
 async function post(path, data) {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify(data),
-  });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "Сервис временно недоступен.");
-  return body;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 125000);
+  try {
+    const response = await fetch(path, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(data), signal: controller.signal,
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error || (response.status === 429
+      ? "Слишком много запросов. Попробуйте чуть позже." : "Сервис временно недоступен."));
+    if (!body || typeof body !== "object") throw new Error("Сервер вернул непонятный ответ.");
+    const timings = Object.fromEntries((response.headers?.get("Server-Timing") || "").split(",")
+      .map(value => /^\s*(gemma|resolve|search|total);dur=(\d+(?:\.\d+)?)\s*$/.exec(value))
+      .filter(Boolean).map(([, stage, duration]) => [stage, Number(duration)]));
+    return {...body, timings};
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("Сервер не ответил вовремя. Попробуйте отправить запрос ещё раз.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function bubble(role, text) {
@@ -146,17 +160,13 @@ function bubble(role, text) {
   return note;
 }
 
-function traceText(trace) {
-  if (trace.model === "Локальный разбор") return trace.model + " · без вызова Gemma";
-  const tokens = trace.prompt_tokens !== null && trace.completion_tokens !== null
-    ? " · " + (trace.prompt_tokens + trace.completion_tokens) + " токенов" : "";
-  return trace.model.split("/").pop() + " · " +
-    (trace.elapsed_ms / 1000).toLocaleString("ru-RU", {maximumFractionDigits: 2}) + " с" + tokens;
+function seconds(ms) {
+  return (ms / 1000).toLocaleString("ru-RU", {maximumFractionDigits: 3}) + " с";
 }
 
 function renderEvidence(data) {
   const list = element("dl", "conditions");
-  for (const requirement of data.requirements) {
+  for (const requirement of data.requirements || []) {
     const value = requirement.value;
     const row = element("div");
     row.append(element("dt", null, requirement.label),
@@ -164,40 +174,183 @@ function renderEvidence(data) {
         value === null ? "Требует уточнения" : typeof value === "number" ? money(value) : value));
     list.append(row);
   }
-  evidence.replaceChildren(list);
-  if (data.eligible.length) {
-    const counts = element("p", "counts");
-    counts.textContent = "После фильтрации · " +
-      data.eligible.map((item) => item.category + " " + item.count).join(" / ");
-    evidence.append(counts);
+  evidence.replaceChildren(list.firstElementChild ? list : initialEvidence.cloneNode(true));
+  markCity(data.requirements?.find(row => row.label === "Город самовывоза")?.value);
+  if (data.eligible?.length) {
+    const funnel = element("div", "funnel-box");
+    funnel.append(element("h3", "funnel-head", "После обязательных фильтров"));
+    if (Number.isInteger(catalogTotal)) funnel.append(element("p", "model-trace", "Всего в каталоге · " + catalogTotal));
+    for (const {category, count} of data.eligible) {
+      const row = element("div", "funnel-row");
+      row.append(element("span", null, category));
+      if (catalogTotal > 0 && Number.isInteger(count)) {
+        const meter = element("progress", "funnel-track");
+        meter.max = Math.max(catalogTotal, count); meter.value = count;
+        meter.setAttribute("aria-label", category + " после фильтрации");
+        row.append(meter);
+      }
+      row.append(element("strong", null, count));
+      funnel.append(row);
+    }
+    if (data.response?.status === "ok") {
+      const kind = singleItemResult(data.response) ? "Товаров" : "Комплектов";
+      funnel.append(element("p", "model-trace", kind + " в подборе · " + data.response.options.length));
+    }
+    evidence.append(funnel);
   }
-  evidence.append(element("p", "model-trace", traceText(data.trace)));
-  evidence.append(element("p", "model-trace", "Категории · " + data.trace.category_source));
+  const trace = data.trace;
+  if (trace?.model) evidence.append(element("p", "model-trace", trace.model));
+  if (trace?.category_source) evidence.append(element("p", "model-trace", "Категории · " + trace.category_source));
+  const timing = data.timings || {};
+  const telemetry = element("div", "telemetry-grid");
+  function metric(label, value) {
+    if (value == null) return;
+    const panel = element("div", "tele-card");
+    panel.append(element("strong", null, value), element("span", null, label));
+    telemetry.append(panel);
+  }
+  const gemmaTime = timing.gemma > 0 ? timing.gemma
+    : trace?.model && trace.model !== "Локальный разбор" ? trace.elapsed_ms : null;
+  for (const [label, ms] of [["Gemma API", gemmaTime], ["Поиск", timing.search], ["Ответ сервера", timing.total]]) {
+    if (Number.isFinite(ms) && ms > 0) metric(label, seconds(ms));
+  }
+  if (Number.isInteger(trace?.prompt_tokens) && Number.isInteger(trace?.completion_tokens)) {
+    metric("Токенов", trace.prompt_tokens + trace.completion_tokens);
+  }
+  if (telemetry.firstElementChild) evidence.append(telemetry);
   if (data.preferences?.length) {
     evidence.append(element("p", "model-trace", "Пожелания · " +
       [...new Set(data.preferences.map(({text}) => text))].join(", ")));
   }
 }
 
+const photoPath = /^products\/[a-zA-Z0-9_-]+\.(png|jpe?g|webp)$/i;
+let catalogPhotos = {};
+let catalogTotal = null;
+let confirmedCity = null;
+const cityButtons = new Map();
+function markCity(city) {
+  confirmedCity = city;
+  for (const [name, button] of cityButtons) button.setAttribute("aria-pressed", String(city === name));
+}
+
+function productPhoto(container, item, photo) {
+  if (typeof photo?.path !== "string" || !photoPath.test(photo.path)) return;
+  const image = element("img");
+  image.src = "/visual-images/" + photo.path;
+  image.alt = (photo.synthetic ? "Демонстрационное фото: " : "") + item.title;
+  image.loading = "lazy";
+  const badge = photo.synthetic ? element("span", "photo-badge", "Демонстрационное фото") : null;
+  image.addEventListener("error", () => { image.remove(); badge?.remove(); });
+  container.append(image);
+  if (badge) container.append(badge);
+}
+
+const selected = new Map();
+const textBundleUpdates = new Set(), photoBundleUpdates = new Set();
+const dock = byId("bundle-dock"), bundleDetail = byId("bundle-detail"), bundleToggle = byId("bundle-toggle");
+let toastTimer;
+function notify(text) {
+  const toast = byId("toast");
+  toast.hidden = false; toast.textContent = text;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 2800);
+}
+
+function renderBundle() {
+  dock.hidden = selected.size === 0;
+  if (dock.hidden) {
+    bundleDetail.hidden = true;
+    bundleToggle.setAttribute("aria-expanded", "false");
+  }
+  byId("bundle-count").textContent = selected.size + " " + plural(selected.size, "товар", "товара", "товаров");
+  byId("bundle-total").textContent = money([...selected.values()].reduce((sum, item) => sum + item.price_rub, 0));
+  const list = byId("bundle-items");
+  list.replaceChildren();
+  for (const [id, item] of selected) {
+    const row = element("li");
+    const remove = element("button", "bundle-remove", "Убрать");
+    remove.type = "button";
+    remove.setAttribute("aria-label", "Убрать: " + item.title);
+    remove.addEventListener("click", () => { selected.delete(id); renderBundle(); notify("Товар убран"); });
+    row.append(element("span", "bundle-item-name", item.title), element("strong", null, money(item.price_rub)), remove);
+    list.append(row);
+  }
+  for (const updates of [textBundleUpdates, photoBundleUpdates]) {
+    for (const update of updates) update();
+  }
+}
+
+function bundleAction(id, item, updates) {
+  const button = element("button", "add-bundle");
+  button.type = "button";
+  function update() {
+    const picked = selected.has(id);
+    button.textContent = picked ? "В комплекте" : "В мой комплект";
+    button.setAttribute("aria-pressed", String(picked));
+    button.className = picked ? "add-bundle selected" : "add-bundle";
+  }
+  updates.add(update);
+  update();
+  button.addEventListener("click", () => {
+    if (selected.has(id)) { selected.delete(id); notify("Товар убран"); }
+    else { selected.set(id, item); notify("Добавлено в мой комплект"); }
+    renderBundle();
+  });
+  return button;
+}
+
+bundleToggle.addEventListener("click", () => {
+  bundleDetail.hidden = !bundleDetail.hidden;
+  bundleToggle.setAttribute("aria-expanded", String(!bundleDetail.hidden));
+});
+byId("bundle-clear").addEventListener("click", () => { selected.clear(); renderBundle(); notify("Комплект очищен"); });
+
+function plural(count, one, few, many) {
+  if (count % 100 >= 11 && count % 100 <= 14) return many;
+  if (count % 10 === 1) return one;
+  return count % 10 >= 2 && count % 10 <= 4 ? few : many;
+}
+
+const conditionLabel = item => item?.condition_label || item?.condition || "";
+
 function buildOption(option, index, data) {
   const card = element("article", "pane option");
   const summary = element("div", "option-summary");
-  summary.append(element("div", "micro", "ВАРИАНТ " + (index + 1)),
-    element("h3", "total", money(option.total_rub)),
-    element("p", "reserve", option.total_rub === data.budget_rub ? "Ровно в бюджете"
-      : "Запас " + money(data.budget_rub - option.total_rub)));
+  const covers = element("div", "option-cover");
+  for (const id of option.listing_ids) {
+    const cover = element("div", "card-photo photo-placeholder");
+    productPhoto(cover, data.items[id], Object.hasOwn(catalogPhotos, id) ? catalogPhotos[id] : null);
+    covers.append(cover);
+  }
+  card.append(covers);
+  summary.append(element("h3", "micro", "ВАРИАНТ " + (index + 1)));
+  const price = element("div", "price-row");
+  price.append(element("strong", "total", money(option.total_rub)));
+  if (Number.isFinite(data.budget_rub) && option.total_rub <= data.budget_rub) {
+    price.append(element("p", "reserve", option.total_rub === data.budget_rub
+      ? "Ровно в бюджете" : "Запас " + money(data.budget_rub - option.total_rub)));
+  }
+  summary.append(price);
+  if (data.budget_rub > 0) {
+    const meter = element("progress", "budget-track");
+    meter.max = data.budget_rub; meter.value = option.total_rub;
+    meter.setAttribute("aria-label", "Сумма варианта относительно бюджета подбора");
+    summary.append(meter);
+  }
   const itemList = element("ul", "items");
   for (const id of option.listing_ids) {
     const item = data.items[id];
     const row = element("li");
-    const icon = element("span", "product-icon " + item.category_id,
-      {table: "▰", chair: "◩", lamp: "◉"}[item.category_id]);
-    icon.setAttribute("aria-hidden", "true");
     const content = element("div");
     content.append(element("p", "category", item.category),
       element("p", "item-title", item.title),
-      element("p", "item-feature", item.feature || "Характеристика не указана"));
-    row.append(icon, content, element("strong", "item-price", money(item.price_rub)));
+      element("p", "item-feature", [item.city, item.feature].filter(Boolean).join(" · ")),
+      element("p", "listing-id", "ID " + id));
+    if (conditionLabel(item)) content.append(element("span", "listing-condition", conditionLabel(item)));
+    const actions = element("div", "listing-actions");
+    actions.append(bundleAction(id, item, textBundleUpdates));
+    content.append(actions);
+    row.append(content, element("strong", "item-price", money(item.price_rub)));
     itemList.append(row);
   }
   const details = element("details", "proof");
@@ -219,25 +372,88 @@ function singleItemResult(response) {
   return response.options.length > 0 && response.options.every(option => option.listing_ids.length === 1);
 }
 
+let visibleResult = null;
+let localCondition = "", resultSort = "recommended";
+const conditionInput = byId("quick-condition");
+
+function refreshConditions(data) {
+  const conditions = new Set(Object.values(data?.items || {}).map(conditionLabel).filter(Boolean));
+  byId("quick-condition-control").hidden = conditions.size === 0;
+  const any = element("option", null, "Любое"); any.value = "";
+  conditionInput.replaceChildren(any);
+  for (const condition of conditions) {
+    const entry = element("option", null, condition);
+    entry.value = condition;
+    conditionInput.append(entry);
+  }
+  if (!conditions.has(localCondition)) localCondition = "";
+  conditionInput.value = localCondition;
+}
+
+conditionInput.addEventListener("change", () => {
+  localCondition = conditionInput.value;
+  if (visibleResult?.response.status === "ok") renderResults(visibleResult);
+});
+
+function validatedReply(data) {
+  if (Array.isArray(data.clarification) && data.clarification.length &&
+      data.clarification.every(text => typeof text === "string")) return true;
+  const response = data.response;
+  if (response?.status === "no_match" && typeof response.message === "string") return false;
+  if (response?.status === "clarify" && Array.isArray(response.questions) && response.questions.length &&
+      response.questions.every(question => typeof question?.text === "string")) return false;
+  if (response?.status === "ok" && Array.isArray(response.options) && response.options.length &&
+      response.options.every(option => Number.isFinite(option?.total_rub) &&
+        Array.isArray(option.listing_ids) && option.listing_ids.length && option.listing_ids.every(id => {
+          const item = data.items?.[id];
+          return typeof id === "string" && typeof item?.title === "string" && Number.isFinite(item.price_rub);
+        }))) return false;
+  throw new Error("Сервер вернул неподдерживаемый результат. Попробуйте отправить запрос ещё раз.");
+}
+
 function renderResults(data) {
   const response = data.response;
+  textBundleUpdates.clear();
   results.replaceChildren();
   results.hidden = false;
   if (response.status === "ok") {
     const bar = element("div", "result-heading");
     const title = element("div");
-    const count = response.options.length;
     const single = singleItemResult(response);
+    const options = response.options.filter(option =>
+      !localCondition || option.listing_ids.every(id => conditionLabel(data.items[id]) === localCondition));
+    if (resultSort !== "recommended") {
+      const direction = resultSort === "cheap" ? 1 : -1;
+      options.sort((left, right) => direction * (left.total_rub - right.total_rub));
+    }
+    const count = options.length;
+    const filtered = count !== response.options.length;
     title.append(element("h2", null, single ? "Подходящие товары" : "Подходящие комплекты"),
-      element("p", null, single ? (count === 1 ? "Найдено 1 объявление" : "Найдено " + count + " объявления")
-        : (count === 1 ? "Найден 1 комплект" : "Найдено " + count + " комплекта")));
-    bar.append(title, element("span", "pill", "Проверено по каталогу"));
+      element("p", null, filtered ? "Показано " + count + " из " + response.options.length
+        : single ? "Найдено " + count + " " + plural(count, "объявление", "объявления", "объявлений")
+        : (count === 1 ? "Найден 1 комплект" : "Найдено " + count + " " + plural(count, "комплект", "комплекта", "комплектов"))));
+    const sort = element("div", "sort-group");
+    sort.setAttribute("role", "group");
+    sort.setAttribute("aria-label", "Сортировка вариантов");
+    for (const [value, label] of [["recommended", "По подбору"], ["cheap", "Сначала дешевле"], ["expensive", "Сначала дороже"]]) {
+      const button = element("button", resultSort === value ? "active" : null, label);
+      button.type = "button";
+      button.id = "sort-" + value;
+      button.setAttribute("aria-pressed", String(resultSort === value));
+      button.addEventListener("click", () => {
+        resultSort = value;
+        renderResults(data);
+        byId(button.id).focus();
+      });
+      sort.append(button);
+    }
+    bar.append(title, sort);
     const grid = element("div", "option-grid");
-    response.options.forEach((option, index) => grid.append(buildOption(option, index, data)));
-    results.append(bar, grid);
+    options.forEach((option, index) => grid.append(buildOption(option, index, data)));
+    results.append(bar, count ? grid : element("p", "filter-empty", "Снимите локальные фильтры, чтобы увидеть варианты."));
   }
   if (response.status === "no_match") {
-    results.append(element("h2", null, "Подходящих комплектов нет"),
+    results.append(element("h2", null, "Подходящих вариантов нет"),
       element("p", null, response.message));
   } else if (response.status === "clarify") {
     results.append(element("p", null, response.questions.map(question => question.text).join("\n")));
@@ -253,7 +469,7 @@ function assistantReply(response, unchanged = false) {
     " не изменились: подтверждённые условия и результат совпадают с предыдущим подбором.";
   return (single ? "Нашёл подходящие объявления. Самый доступный вариант — "
     : "Подобрал комплект с самовывозом. Самый доступный вариант — ") +
-    money(response.options[0].total_rub) + ". Можно сравнить позиции ниже.";
+    money(Math.min(...response.options.map(option => option.total_rub))) + ". Можно сравнить позиции ниже.";
 }
 
 async function submit(text) {
@@ -273,6 +489,8 @@ async function submit(text) {
   reset.disabled = true;
   send.textContent = "Проверяем…";
   starter.hidden = true;
+  visibleResult = null;
+  textBundleUpdates.clear();
   results.replaceChildren();
   results.hidden = true;
   const user = bubble("user", turn.text);
@@ -282,7 +500,7 @@ async function submit(text) {
   messages.scrollTop = messages.scrollHeight;
   try {
     const data = await post("/api/buy", {messages: [...history, turn]});
-    const clarification = data.clarification?.length > 0;
+    const clarification = validatedReply(data);
     const fingerprint = data.response?.status === "ok" ? JSON.stringify({
       options: data.response.options.map(({listing_ids, total_rub}) => ({listing_ids, total_rub})),
       requirements: data.requirements, preferences: data.preferences,
@@ -297,9 +515,12 @@ async function submit(text) {
     messages.scrollTop = messages.scrollHeight;
     renderEvidence(data);
     if (clarification) {
+      refreshConditions(null);
       results.replaceChildren();
       results.hidden = true;
     } else {
+      visibleResult = data;
+      refreshConditions(data);
       renderResults(data);
     }
     reset.hidden = false;
@@ -331,14 +552,19 @@ query.addEventListener("keydown", (event) => {
     submit(query.value);
   }
 });
-byId("prompts").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-prompt]");
-  if (button) submit(button.dataset.prompt);
-});
+for (const group of ["prompts", "hero-chips"]) {
+  byId(group).addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-prompt]");
+    if (button) submit(button.dataset.prompt);
+  });
+}
 function resetDialogue() {
   voiceInput.cancel();
   history.length = 0;
   lastOkFingerprint = null;
+  visibleResult = null; resultSort = "recommended";
+  textBundleUpdates.clear();
+  refreshConditions(null); markCity(null);
   messages.replaceChildren(starter);
   starter.hidden = false;
   reset.hidden = true;
@@ -352,62 +578,27 @@ function resetDialogue() {
 }
 reset.addEventListener("click", resetDialogue);
 
-const buyerTab = byId("buyer-tab");
-const labTab = byId("lab-tab");
-function view(lab) {
-  if (lab) voiceInput.stop();
-  buyerTab.setAttribute("aria-pressed", String(!lab));
-  labTab.setAttribute("aria-pressed", String(lab));
-  byId("buyer-view").hidden = lab;
-  byId("lab-view").hidden = !lab;
-}
-buyerTab.addEventListener("click", () => view(false));
-labTab.addEventListener("click", () => view(true));
-
-function summarizeLab(response, catalog) {
-  if (response.status !== "ok") return response.status;
-  const names = new Map(catalog.map((item) => [item.id, item.title]));
-  return response.options.map((option) => option.listing_ids.map((id) => names.get(id)).join(", ")
-    + " · " + money(option.total_rub)).join("\n");
-}
-
-const labButton = byId("run-lab");
-labButton.addEventListener("click", async () => {
-  const panel = byId("lab-result");
-  const error = byId("lab-error");
-  error.hidden = true;
-  labButton.disabled = true;
-  labButton.textContent = "Сравниваем…";
-  try {
-    const data = await post("/api/lab", {});
-    panel.replaceChildren(element("h2", null, "Результат проверки"),
-      element("p", data.passed ? "pill" : "pill warning",
-        data.passed ? "Подбор совпал" : "Ожидание проверки не выполнено"));
-    const comparison = element("dl", "conditions comparison");
-    for (const [label, result] of [["Обычные описания", data.before], ["Описания со вставкой", data.after]]) {
-      const row = element("div");
-      row.append(element("dt", null, label), element("dd", null, summarizeLab(result, data.catalog)));
-      comparison.append(row);
-    }
-    panel.append(comparison);
-    if (data.passed) {
-      panel.append(element("p", "muted",
-        "Стол за 5 400 ₽ подходит. Стол за 9 500 ₽ превышает бюджет. Подбор использует цены из структурированных полей."));
-    }
-    panel.append(element("p", "model-trace", traceText(data.trace)),
-      jsonDetails({before: data.before, after: data.after}));
-  } catch (problem) {
-    error.textContent = problem.message;
-    error.hidden = false;
-  } finally {
-    labButton.disabled = false;
-    labButton.textContent = "Сравнить результаты";
-  }
-});
-
 fetch("/api/catalog").then((response) => response.ok ? response.json() : null).then((catalog) => {
-  if (catalog) byId("catalog-label").textContent = "Учебный каталог · " +
-    catalog.total.toLocaleString("ru-RU") + " объявлений · " + catalog.cities.length + " города";
+  if (!catalog) return;
+  catalogPhotos = catalog.photos || {};
+  if (Number.isInteger(catalog.total)) {
+    catalogTotal = catalog.total;
+    const label = byId("catalog-label");
+    label.textContent = "Каталог · " + catalogTotal.toLocaleString("ru-RU") + " " +
+      plural(catalogTotal, "объявление", "объявления", "объявлений");
+    label.hidden = false;
+  }
+  const bar = byId("city-bar");
+  for (const city of catalog.cities || []) {
+    const button = element("button", null, city);
+    button.type = "button";
+    button.addEventListener("click", () => submit("Город " + city));
+    cityButtons.set(city, button);
+    bar.append(button);
+  }
+  bar.hidden = !cityButtons.size;
+  markCity(confirmedCity);
+  if (visibleResult) { renderEvidence(visibleResult); renderResults(visibleResult); }
 }).catch(() => {});
 
 // Optional photo mode owns no dialogue state. Its errors cannot escape into submit().
@@ -435,7 +626,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = null; preview.removeAttribute("src"); preview.hidden = true; input.value = "";
     preview.onload = preview.onerror = null;
-    cards.replaceChildren(); controls();
+    photoBundleUpdates.clear(); cards.replaceChildren(); controls();
     status.textContent = "Фото удалено. Можно продолжить обычный поиск или выбрать другое изображение.";
   }
   async function chooseExample(url) {
@@ -481,16 +672,17 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
         const progress = Number.isFinite(data.downloaded_bytes) && data.downloaded_bytes >= 0
           && data.total_bytes > 0 && data.downloaded_bytes <= data.total_bytes
           ? " · " + Math.floor(data.downloaded_bytes / data.total_bytes * 100) + "%" : "";
-        readiness.textContent = data.message + progress;
-        readiness.setAttribute("data-state", "checking");
+        readiness.textContent = (data.message || "Подготавливаем поиск по фото…") + progress;
+        readiness.setAttribute("data-state", data.status);
         setup.hidden = true;
         if (!panel.hidden) setupTimer = setTimeout(() => refreshReadiness(), 1500);
         return;
       }
       readiness.textContent = data.message + (data.coverage ? " Покрытие: " + data.coverage.indexed + " из " + data.coverage.total + " объявлений." : "");
-      readiness.setAttribute("data-state", data.status === "ready" ? "ready" : "unavailable");
+      readiness.setAttribute("data-state", data.status);
       setup.hidden = data.status === "ready";
       setupHint.textContent = data.setup_hint || "Проверьте установку и подготовку визуального модуля.";
+      if (data.status !== "ready") setup.open = true;
       examples.replaceChildren(); exampleButtons = [];
       for (const sample of data.examples || []) {
         if (!/^\/visual-demo\/(table|chair|lamp|landscape)$/.test(sample.url)) continue;
@@ -507,7 +699,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
         preparing = false;
         readiness.textContent = "Готовность фото-поиска не подтверждена. Обычный поиск доступен.";
         readiness.setAttribute("data-state", "unavailable");
-        setup.hidden = false; setupHint.textContent = "Проверьте запуск сервера и подготовку модуля по README.";
+        setup.hidden = false; setup.open = true; setupHint.textContent = "Проверьте запуск сервера и подготовку модуля по README.";
       }
     } finally { clearTimeout(timeout); healthPending = false; controls(); }
   }
@@ -516,6 +708,9 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
     clear();
     if (!files || files.length !== 1 || !files[0].size || files[0].size > 5 * 1024 * 1024) {
       status.textContent = "Выберите одно изображение размером до 5 МБ."; return;
+    }
+    if (files[0].type && !["image/jpeg", "image/png", "image/webp"].includes(files[0].type)) {
+      status.textContent = "Выберите изображение JPEG, PNG или WebP."; return;
     }
     try {
       file = files[0];
@@ -540,7 +735,11 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
   toggle.addEventListener("click", () => {
     const opening = panel.hidden;
     panel.hidden = !opening; toggle.setAttribute("aria-expanded", String(opening));
-    if (opening) { voiceInput.stop(); refreshReadiness(); }
+    if (opening) {
+      voiceInput.stop();
+      panel.scrollIntoView?.({block: "nearest"});
+      refreshReadiness();
+    }
     else clearTimeout(setupTimer);
   });
   input.addEventListener("change", () => choose(input.files));
@@ -551,7 +750,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
   search.addEventListener("click", async () => {
     if (!file || pending || preparing || healthPending) return;
     const requestGeneration = generation;
-    pending = true; controls(); cards.replaceChildren();
+    pending = true; controls(); photoBundleUpdates.clear(); cards.replaceChildren();
     status.textContent = "Ищу похожие товары…";
     let requestTimeout;
     try {
@@ -564,22 +763,25 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
       if (generation !== requestGeneration) return;
       if (!response.ok || result.status !== "ok") {
         status.textContent = result.message || "Визуальный поиск недоступен. Вы можете воспользоваться обычным поиском.";
-        if (result.status === "visual_unavailable") { setup.hidden = false; setupHint.textContent = result.setup_hint || "Повторите подготовку модуля по README."; }
+        if (result.status === "visual_unavailable") {
+          setup.hidden = false; setup.open = true;
+          setupHint.textContent = result.setup_hint || "Повторите подготовку модуля по README.";
+        }
         return;
       }
       status.textContent = result.message + " Покрытие каталога: " + result.coverage.indexed + " из " + result.coverage.total + " объявлений.";
       for (const item of result.results) {
         const card = element("article", "visual-card");
-        const image = element("img");
-        // Only the demo's allowlisted relative product images can be displayed.
-        if (typeof item.image_path === "string" && /^products\/[a-zA-Z0-9_-]+\.(png|jpe?g|webp)$/.test(item.image_path)) {
-          image.src = "/visual-images/" + item.image_path; image.alt = "Демонстрационное изображение: " + item.title;
-          image.loading = "lazy";
-          card.append(image);
+        const cover = element("div", "card-photo photo-placeholder");
+        productPhoto(cover, item, {path: item.image_path, synthetic: item.synthetic});
+        const content = element("div", "option-summary");
+        content.append(element("h3", null, item.rank + ". " + item.title),
+          element("p", null, item.category + " · " + item.city), element("strong", null, money(item.price_rub)));
+        if (typeof item.listing_id === "string") {
+          content.append(element("p", "listing-id", "ID " + item.listing_id),
+            bundleAction(item.listing_id, item, photoBundleUpdates));
         }
-        card.append(element("h3", null, item.rank + ". " + item.title),
-          element("p", null, item.category + " · " + item.city), element("strong", null, money(item.price_rub)),
-          element("p", null, item.synthetic ? "Синтетическое демо-изображение" : "Демонстрационное изображение"));
+        card.append(cover, content);
         cards.append(card);
       }
     } catch {

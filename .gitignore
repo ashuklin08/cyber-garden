@@ -9,6 +9,7 @@ __pycache__/
 .venv/
 /models/vision/
 /cache/visual/
+/cache/frontend-redesign/
 /data/visual/queries/private/
 *.onnx
 *.download
