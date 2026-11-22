@@ -7,7 +7,7 @@ from buyer.anchors import WORDS, accessory_context, categories_from_dialog
 from buyer.contracts import CATEGORIES, CITIES, Requirements, read_requirements
 from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
                                 TEMPERATURE, WIDTH, MEASURE, PRICE_PER_ITEM, RELATIVE_BUDGET,
-                                unsupported_measurement, Preference, normalize, parse_turn, tighten)
+                                unsupported_measurement, Preference, normalize, parse_turn, single_item_quote, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
 from buyer.recovery import (DECLINE, DECLINED, UNDO, Suggestion, interpret_reply, offer_block,
                             recovery_response)
@@ -63,6 +63,9 @@ DOMAIN_QUESTION = ("Не удалось понять запрос. Пожалу�
                    "вам нужен, город самовывоза и максимальный бюджет.")
 CHANGE_QUESTION = ("Не удалось понять, что нужно изменить. Пожалуйста, перепишите это "
                    "условие другими словами.")
+PRICE_QUESTION = "Указанное число — цена одного товара или общий бюджет на весь комплект?"
+ITEM_ANSWER = re.compile(r"(?:(?:цена|стоимость)\s+)?(?:один товар|одного товара|за (?:один товар|штуку))")
+TOTAL_ANSWER = re.compile(r"(?:общий(?: бюджет)?|бюджет|(?:на|за) (?:все|весь комплект)|весь комплект)")
 
 
 _THOUSAND_TYPO = re.compile(
@@ -126,7 +129,8 @@ def _correct_buyer_text(text):
     text = re.sub(r"\bлумп([ауые])\b", r"ламп\1", text, flags=re.I)
     text = re.sub(r"\b(?:в|из)\s+тагане\b", "в Таганроге", text, flags=re.I)
     text = re.sub(r"\bсотк[ау]\s+руб(?:асов|ликов)\b", "100 рублей", text, flags=re.I)
-    if re.search(r"\b(?:найди|подбери|подыщи|ищу)\b", text, re.I):
+    if (sum(bool(pattern.search(text)) for pattern in WORDS.values()) > 1
+            and re.search(r"\b(?:найди|подбери|подыщи|ищу)\b", text, re.I)):
         text = re.sub(r"\bза\s+(\d+(?:[.,]\d+)?)\s+руб\w*\b",
                       r"бюджет \1 рублей", text, flags=re.I)
     text = _TABLE_TYPO.sub(r"\1стол", text)
@@ -145,6 +149,23 @@ def active_dialog(messages):
             boundary = index
     return [dict(message, text=_correct_buyer_text(message["text"]))
             if message["role"] == "user" else message for message in messages[boundary:]]
+
+
+def _buyer_turn(messages, index):
+    """Resolve a price-scope answer only against the preceding buyer's quote."""
+    original = messages[index]["text"]
+    if index < 2 or messages[index - 1]["role"] != "assistant" or messages[index - 2]["role"] != "user":
+        return original
+    if PRICE_QUESTION not in messages[index - 1]["text"]:
+        return original
+    answer = normalize(original).strip(" .!?")
+    item = ITEM_ANSWER.fullmatch(answer)
+    if not item and not TOTAL_ANSWER.fullmatch(answer):
+        return original
+    quote = single_item_quote(normalize(messages[index - 2]["text"]))
+    if not quote:
+        return original
+    return (f"Только {CATEGORIES[quote.category]}. " if item else "") + f"Бюджет {quote.rubles}"
 
 
 def _unscoped_price(text):
@@ -218,8 +239,7 @@ class LocalState:
                              for field in missing)
             return ({"field": "categories", "text": CHANGE_QUESTION},)
         if self.turn_issue in {"price", "chair_price"}:
-            questions = [{"field": "budget_rub", "text":
-                          "Указанное число — цена одного товара или общий бюджет на весь комплект?"}]
+            questions = [{"field": "budget_rub", "text": PRICE_QUESTION}]
             if self.turn_issue == "chair_price":
                 questions.append({"field": "categories", "text":
                     "В каталоге поддерживается категория «Кресло». Подойдёт ли вам кресло вместо стула?"})
@@ -433,7 +453,15 @@ class ConversationManager:
                 needs_model = True
                 pending = set()
                 continue
-            turn = parse_turn(message["text"], pending, current)
+            buyer_text = _buyer_turn(messages, index)
+            text = normalize(buyer_text)
+            turn = parse_turn(buyer_text, pending, current)
+            single_search = turn.single_purchase
+            if (single_search and index + 1 < len(messages) and messages[index + 1]["role"] == "assistant"
+                    and PRICE_QUESTION in messages[index + 1]["text"]):
+                # Older sessions explicitly left the scope open. Replay that decision
+                # so either answer can still be applied to the original composition.
+                single_search = False
             if "city_id" in turn.values:
                 unsupported_city = None
             turn.preferences.extend(purpose_wishes(text, current.categories))
@@ -445,7 +473,7 @@ class ConversationManager:
                 needs_model = True
                 pending = set()
                 continue
-            if _unscoped_price(text):
+            if not single_search and _unscoped_price(text):
                 turn_issue = "chair_price" if re.search(r"\bстул\w*\b", text) else "price"
                 turn.values.pop("budget_rub", None)
                 turn.uncertain.discard("budget_rub")
@@ -457,8 +485,11 @@ class ConversationManager:
                 current.categories and re.search(r"\bподыщи\b", composition)
                 and not re.search(r"\b(?:еще|добавь|также)\b", composition))
             composition_history.append({"role": "user", "text": composition})
+            if single_search:
+                composition_history = composition_history[-1:]
             anchor = categories_from_dialog(composition_history)
-            recognized, categories = _category_update(composition, current.categories, "categories" in pending)
+            recognized, categories = _category_update(composition, () if single_search else current.categories,
+                                                       "categories" in pending)
             if semantic_refusal and recognized and categories:
                 semantic_refusal = False
                 composition_history = [{"role": "user", "text": composition}]
@@ -629,6 +660,10 @@ class ConversationManager:
         if raw_city is not None and raw_city not in CITIES:
             location = location or dict(name=raw_city, type="city", city_id=raw_city)
             model = replace(model, requirements=replace(model.requirements, city_id=None))
+        if (location and location.get("type") in {"uncertain", "other"}
+                and "city_id" in local.confirmed and "city_id" not in local.unresolved):
+            # An empty location guess on a price reply cannot revoke a known city.
+            location = None
         if location is not None:
             city = location.get("city_id")
             if location.get("type") == "city":
@@ -658,7 +693,7 @@ class ConversationManager:
             previous_messages = messages[:-2] if len(messages) > 1 else []
             previous = self.local(previous_messages, recovery_listings=recovery_listings,
                                   recovery_history=recovery_history)
-            last = messages[-1]["text"]
+            last = _buyer_turn(messages, len(messages) - 1)
             turn = parse_turn(last, set(), previous.requirements)
             explicit = turn.values or turn.preferences or any(pattern.search(last) for pattern in WORDS.values())
             if not explicit:

@@ -71,6 +71,8 @@ MONEY = re.compile(rf"(?<![\w-])(?P<n>{NUMBER})(?:\s*(?P<u>{MONEY_UNIT})(?!\w))?
 SHORT_BUDGET_REPLY = re.compile(
     rf"(?:давай(?:те)?|тогда|пусть будет|можно)\s+(?:до\s+)?{NUMBER}"
     rf"(?:\s*(?:{MONEY_UNIT}))?\s*[.!?]*")
+PURCHASE_REQUEST = re.compile(r"^(?:пожалуйста[, ]+)?(?:найти|найди(?:те)?|подобрать|подбери(?:те)?|"
+                              r"подыщи|поищи|покажи(?:те)?|ищу|хочу купить|купить)\b")
 BARE_MEASURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})(?P<u>)")
 PLAIN_MEASURE = re.compile(rf"(?:(?:{'|'.join(pattern for _, pattern in OPERATIONS)})\s+|"
                           rf"[<>=≤≥]+\s*)?{NUMBER}\s*[.!?]*")
@@ -137,6 +139,7 @@ class Turn:
     preferences: list = field(default_factory=list)
     ambiguous_attributes: set = field(default_factory=set)
     needs_model: bool = False
+    single_purchase: bool = False
 
 
 @dataclass(frozen=True)
@@ -144,6 +147,13 @@ class BudgetReading:
     amount: int | None = None
     uncertain: bool = False
     preference: str | None = None
+
+
+@dataclass(frozen=True)
+class ItemQuote:
+    category: str
+    rubles: int
+    direct_search: bool
 
 
 def normalize(text):
@@ -283,6 +293,38 @@ def _categories(text):
     return {key for key, pattern in WORDS.items() if pattern.search(text)}
 
 
+def single_item_quote(text):
+    """One named product and one plausible ruble amount, still awaiting scope."""
+    categories = _categories(text)
+    if len(categories) != 1 or BUDGET_WORD.search(text):
+        return None
+    amounts = list(MONEY.finditer(text))
+    if len(amounts) != 1:
+        return None
+    hit = amounts[0]
+    prefix, suffix = text[:hit.start()], text[hit.end():]
+    unit = hit["u"] or ""
+    if unit.startswith(("тыс", "млн", "миллион")):
+        suffix = re.sub(r"^\s*(?:руб\w*\b\.?|₽)", "", suffix)
+    # A bare amount may end the request or precede a location. Other units,
+    # quantities and alternatives must keep their own meaning.
+    if not re.fullmatch(r"\s*[.!?]*", suffix) and not re.match(
+            r"^[\s,]+(?:(?:самовывоз|забрать)\s+)?(?:в|из|город)\s+", suffix):
+        return None
+    after_za = bool(re.search(r"\bза\s+$", prefix))
+    if (MEASURE.search(text) or RELATIVE_BUDGET.search(text)
+            or TEMPERATURE.search(text) and not after_za):
+        return None
+    if not hit["u"] and any(re.search(words, prefix) for words in FEATURE_WORDS.values()):
+        return None
+    value = _value(hit, "budget_rub")
+    if value != int(value) or not 0 <= value <= 10**12:
+        return None
+    direct = (bool(PURCHASE_REQUEST.search(text) and after_za)
+              and not re.search(r"\b(?:комплект\w*|добав\w*|плюс|также|еще|или|либо|не)\b", text))
+    return ItemQuote(categories.pop(), int(value), direct)
+
+
 def _feature_spans(text, regex):
     for hit in regex.finditer(text):
         window_start = max(0, hit.start() - 48)
@@ -293,6 +335,12 @@ def _feature_spans(text, regex):
 def parse_turn(message, pending, current):
     text = normalize(message)
     turn = Turn(needs_model=bool(CONTEXT.search(text) or AMBIGUOUS.search(text)))
+    quote = single_item_quote(text)
+    if quote and quote.direct_search:
+        # A single-item price cap is the total for this search. Make the unit
+        # explicit before the generic measurement parser sees e.g. «5к».
+        text = MONEY.sub(f"бюджет {quote.rubles} рублей", text, count=1)
+        turn.single_purchase = True
     city_hits, rejected_cities = set(), set()
     for key, pattern in CITIES_RE.items():
         for match in pattern.finditer(text):
