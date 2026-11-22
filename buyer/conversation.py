@@ -9,6 +9,9 @@ from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY,
                                 TEMPERATURE, WIDTH, MEASURE, PRICE_PER_ITEM, RELATIVE_BUDGET,
                                 unsupported_measurement, Preference, normalize, parse_turn, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
+from buyer.recovery import (UNDO, Suggestion, interpret_reply, offer_block,
+                            recovery_response)
+from buyer.selection import select
 
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
              adjustable_height=None, color_temperature_k=[])
@@ -56,82 +59,8 @@ SHOPPING_CONTEXT = re.compile(
     r"комплект\w*|вариант\w*|как\s+раньше|тот\s+же|все\s+то\s+же|table|desk|chair|armchair|lamp)\b")
 OFF_TOPIC_QUESTION = ("Я специализируюсь на подборе товаров из каталога и не отвечаю на вопросы "
                       "по другим темам. Могу помочь выбрать стол, кресло или лампу. Что вас интересует?")
-DOMAIN_QUESTION = ("Не удалось понять запрос. Пожалуйста, напишите отдельно, какой товар "
-                   "вам нужен, город самовывоза и максимальный бюджет.")
-CHANGE_QUESTION = ("Не удалось понять, что нужно изменить. Пожалуйста, перепишите это "
-                   "условие другими словами.")
-
-
-_THOUSAND_TYPO = re.compile(
-    r"(\b\d+(?:[.,]\d+)?\s+)тисяч(?:а|и|у)?\b"
-    r"(?=\s*(?:$|[.,!?;]|₽|руб\w*\b|за\s+вс[её]\b|в\s+))", re.I)
-_CITY_TYPO = re.compile(
-    r"(?P<prefix>\b(?:в|из|город)\s+|^\s*)(?P<city>азев[еи]?|растов[еа]?)\b"
-    r"(?![-\w]|\s+велик)", re.I)
-_TABLE_TYPO = re.compile(
-    r"(^\s*|\b(?:нужен|ищу|купить|подбери|найди)\s+)столь\b"
-    r"(?=\s*(?:$|[.,!?;]|в\s+|до\s+\d|за\s+\d))", re.I)
-_PRODUCT_TYPO = re.compile(
-    r"(?P<prefix>\b(?:нужен|нужна|нужно|хочу|ищу|купить|подбери|найди|покажи|добавь)\s+)"
-    r"(?P<word>[а-яё]{3,9})\b", re.I)
-_INITIAL_PRODUCT_TYPO = re.compile(
-    r"(?P<prefix>^\s*)(?P<word>[а-яё]{3,9})\b"
-    r"(?=\s*(?:$|[.,!?;]|в\s+|до\s+|за\s+|бюджет\b|не\s+(?:шире|дороже)))", re.I)
-_PRODUCT_FORMS = {
-    "table": ("стол", "стола", "столу", "столом", "столе", "столы"),
-    "chair": ("кресло", "кресла", "креслу", "креслом", "кресле", "кресла"),
-    "lamp": ("лампа", "лампу", "лампы", "лампе", "лампой"),
-}
-# These are ordinary words or unsupported products one edit away from a category.
-_PRODUCT_LOOKALIKES = {
-    "столь", "сток", "столб", "рампа", "рампу", "рампы", "рампе",
-    "лапа", "лапу", "лапой", "лама", "ламу", "ламы",
-}
-
-
-def _one_typo(left, right):
-    """Accept one insertion, deletion, substitution or adjacent transposition."""
-    if left == right or abs(len(left) - len(right)) > 1:
-        return False
-    if len(left) == len(right):
-        differences = [index for index, pair in enumerate(zip(left, right)) if pair[0] != pair[1]]
-        return len(differences) == 1 or (len(differences) == 2
-            and differences[1] == differences[0] + 1
-            and left[differences[0]] == right[differences[1]]
-            and left[differences[1]] == right[differences[0]])
-    shorter, longer = (left, right) if len(left) < len(right) else (right, left)
-    for index in range(len(longer)):
-        if longer[:index] + longer[index + 1:] == shorter:
-            return True
-    return False
-
-
-def _correct_product(match):
-    word = match["word"].lower().replace("ё", "е")
-    if word in _PRODUCT_LOOKALIKES or any(pattern.fullmatch(word) for pattern in WORDS.values()):
-        return match[0]
-    matches = {category for category, forms in _PRODUCT_FORMS.items()
-               if any(_one_typo(word, form) for form in forms)}
-    if len(matches) != 1:
-        return match[0]
-    canonical = {"table": "стол", "chair": "кресло", "lamp": "лампа"}[matches.pop()]
-    return match["prefix"] + canonical
-
-
-def _correct_buyer_text(text):
-    # «столь» is also an adverb. Require an item slot with a clear right boundary.
-    text = re.sub(r"\bлумп([ауые])\b", r"ламп\1", text, flags=re.I)
-    text = re.sub(r"\b(?:в|из)\s+тагане\b", "в Таганроге", text, flags=re.I)
-    text = re.sub(r"\bсотк[ау]\s+руб(?:асов|ликов)\b", "100 рублей", text, flags=re.I)
-    if re.search(r"\b(?:найди|подбери|подыщи|ищу)\b", text, re.I):
-        text = re.sub(r"\bза\s+(\d+(?:[.,]\d+)?)\s+руб\w*\b",
-                      r"бюджет \1 рублей", text, flags=re.I)
-    text = _TABLE_TYPO.sub(r"\1стол", text)
-    text = _PRODUCT_TYPO.sub(_correct_product, text)
-    text = _INITIAL_PRODUCT_TYPO.sub(_correct_product, text)
-    text = _THOUSAND_TYPO.sub(r"\1тысяч", text)
-    return _CITY_TYPO.sub(lambda m: m["prefix"] + (
-        "Азов" if m["city"].lower().startswith("аз") else "Ростов"), text)
+DOMAIN_QUESTION = ("Я помогаю подбирать товары из каталога. Уточните, что вы хотите "
+                   "приобрести: например, стол, кресло или лампу.")
 
 
 def active_dialog(messages):
@@ -140,8 +69,7 @@ def active_dialog(messages):
     for index, message in enumerate(messages):
         if message["role"] == "user" and RESET_DIALOG.fullmatch(normalize(message["text"])):
             boundary = index
-    return [dict(message, text=_correct_buyer_text(message["text"]))
-            if message["role"] == "user" else message for message in messages[boundary:]]
+    return messages[boundary:] if boundary else messages
 
 
 def _unscoped_price(text):
@@ -173,14 +101,13 @@ class LocalState:
     turn_issue: str | None = None
     unsupported_items: tuple[str, ...] = ()
     unsupported_city: str | None = None
+    recovery_note: str | None = None
+    recovery_handled: bool = False
 
     def decision_questions(self):
-        if any(re.search(r"(.)\1{2,}", item) for item in self.unsupported_items):
+        if self.turn_issue == "recovery_stale":
             return ({"field": "categories", "text":
-                     "Не удалось разобрать название товара. Пожалуйста, напишите его ещё раз."},)
-        if self.turn_issue == "lumens":
-            return ({"field": "categories", "text":
-                     "В каталоге нет данных о яркости в люменах. Подобрать лампу без этого требования?"},)
+                     "Предложение больше не подтверждается текущим каталогом. Укажите, какое условие изменить."},)
         if self.turn_issue in {"distance", "unsupported_size"}:
             name = "Расстояние" if self.turn_issue == "distance" else "Указанный размер (высота, длина или глубина)"
             return ({"field": "categories", "text": name +
@@ -197,14 +124,7 @@ class LocalState:
         if self.turn_issue == "off_topic":
             return ({"field": "categories", "text": OFF_TOPIC_QUESTION},)
         if self.turn_issue == "ambiguous":
-            missing = self.questions()
-            if set(missing) == set(CORE):
-                return ({"field": "categories", "text": DOMAIN_QUESTION},)
-            if missing:
-                from buyer.selection import QUESTIONS as CLARIFICATION_TEXT
-                return tuple({"field": field, "text": CLARIFICATION_TEXT[field]}
-                             for field in missing)
-            return ({"field": "categories", "text": CHANGE_QUESTION},)
+            return ({"field": "categories", "text": DOMAIN_QUESTION},)
         if self.turn_issue in {"price", "chair_price"}:
             questions = [{"field": "budget_rub", "text":
                           "Указанное число — цена одного товара или общий бюджет на весь комплект?"}]
@@ -269,10 +189,18 @@ def _filter_preferences(preferences, categories):
                                if item.category is None or item.category in categories))
 
 
+def _recovery_values(requirements):
+    values = {key: getattr(requirements, key) for key in EMPTY}
+    values["categories"] = list(requirements.categories)
+    for field in ("width_cm", "color_temperature_k"):
+        values[field] = [[rule.operation, rule.value] for rule in values[field]]
+    return values
+
+
 class ConversationManager:
     """Stateless replay also works when CLI launches a fresh process per turn."""
 
-    def local(self, messages):
+    def local(self, messages, *, recovery_listings=None, recovery_history=None):
         messages = active_dialog(messages)
         values = EMPTY.copy()
         confirmed = set()
@@ -287,10 +215,15 @@ class ConversationManager:
         unsupported_items = ()
         turn_issue = None
         unsupported_city = None
-        for message in messages:
+        recovery_message = None
+        last_accepted = None
+        recovery_handled = False
+        recovery_note = None
+        for index, message in enumerate(messages):
             text = normalize(message["text"])
             if message["role"] == "assistant":
-                pending = _pending(text)
+                recovery_message = offer_block(message["text"]) if recovery_listings is not None else None
+                pending = set() if recovery_message else _pending(text)
                 if UNSUPPORTED_CITY_MESSAGE.casefold() in text.casefold():
                     source = re.search(r"Вы указали: «([^»]+)»", message["text"])
                     unsupported_city = source[1] if source else "неизвестный город"
@@ -307,6 +240,85 @@ class ConversationManager:
                 continue
 
             turn_issue = None
+            recovery_handled = False
+            recovery_note = None
+            current = read_requirements(values)
+            if recovery_message:
+                base, base_preferences = current, preferences
+                cached = recovery_history.find(messages[:index]) if recovery_history else None
+                if cached:
+                    previous, suggestions = cached
+                    base, base_preferences = previous.requirements, previous.preferences
+                else:
+                    strict = select(recovery_listings, base)
+                    response, suggestions = recovery_response(recovery_listings, base, (), strict)
+                    if recovery_message != offer_block(response.get("message", "")):
+                        suggestions = ()
+                unrelated = bool(suggestions and OFF_TOPIC.search(text)
+                                 and not SHOPPING_CONTEXT.search(text)
+                                 and not any(pattern.search(text) for pattern in WORDS.values()))
+                reaction = interpret_reply(message["text"], base, suggestions)
+                if reaction is not None or unrelated:
+                    recovery_handled = True
+                    prior_categories = current.categories
+                    if unrelated:
+                        current = base
+                        turn_issue = "off_topic"
+                    elif isinstance(reaction, Suggestion):
+                        revised = reaction.apply(base)
+                        checked = select(recovery_listings, revised)
+                        if (checked.response["status"] == "ok"
+                                and checked.minimum_total_rub == reaction.minimum_total_rub):
+                            current = revised
+                            last_accepted = (base, current, base_preferences)
+                        else:
+                            current = base
+                            turn_issue = "recovery_stale"
+                    else:
+                        current = base
+                        recovery_note = reaction
+                        if not suggestions:
+                            turn_issue = "recovery_stale"
+                    values = _recovery_values(current)
+                    preferences = _filter_preferences(base_preferences, current.categories)
+                    if prior_categories != current.categories:
+                        composition_history = [{"role": "user", "text":
+                                                ", ".join(CATEGORIES[key] for key in current.categories)}]
+                    confirmed.update(EMPTY)
+                    unresolved.clear()
+                    ambiguous_attributes.clear()
+                    if suggestions:
+                        unsupported_city = None
+                        blocked_categories = semantic_refusal = False
+                        unsupported_items = ()
+                    pending = set()
+                    recovery_message = None
+                    continue
+            recovery_message = None
+            if last_accepted and UNDO.fullmatch(text.strip(" .!")):
+                before, applied, previous_preferences = last_accepted
+                modified = {key: getattr(before, key) for key in EMPTY
+                            if getattr(before, key) != getattr(applied, key)}
+                if all(getattr(current, key) == getattr(applied, key) for key in modified):
+                    restored = replace(current, **modified)
+                    values = _recovery_values(restored)
+                    if restored.categories != current.categories:
+                        composition_history = [{"role": "user", "text":
+                                                ", ".join(CATEGORIES[key] for key in restored.categories)}]
+                        added = set(restored.categories) - set(current.categories)
+                        preferences = tuple(dict.fromkeys((*preferences,
+                            *(item for item in previous_preferences if item.category in added))))
+                    confirmed.update(modified)
+                    unresolved.difference_update(modified)
+                    ambiguous_attributes.difference_update(modified)
+                    recovery_handled = True
+                    recovery_note = "Вернул условия до последнего принятого предложения."
+                    last_accepted = None
+                    pending = set()
+                    continue
+                turn_issue = "recovery_stale"
+                recovery_handled = True
+                continue
             if REJECT_BUNDLE.search(text):
                 turn_issue = "bundle_rejected"
                 needs_model = True
@@ -317,7 +329,6 @@ class ConversationManager:
                 needs_model = True
                 pending = set()
                 continue
-            current = read_requirements(values)
             turn = parse_turn(message["text"], pending, current)
             if "city_id" in turn.values:
                 unsupported_city = None
@@ -338,9 +349,6 @@ class ConversationManager:
             composition = category_text(text)
             switching_product = bool(re.search(
                 r"\b(?:а\s+)?что\s+(?:насчет|насчёт|по\s+поводу)\s+", composition))
-            switching_product |= bool(
-                current.categories and re.search(r"\bподыщи\b", composition)
-                and not re.search(r"\b(?:еще|добавь|также)\b", composition))
             composition_history.append({"role": "user", "text": composition})
             anchor = categories_from_dialog(composition_history)
             recognized, categories = _category_update(composition, current.categories, "categories" in pending)
@@ -421,9 +429,6 @@ class ConversationManager:
             if unsupported_measurement(text):
                 turn_issue = unsupported_measurement(text)
                 needs_model = True
-            if re.search(r"\bлюмен\w*\b", text):
-                turn_issue = "lumens"
-                needs_model = True
 
         # An uncertain last edit cannot reuse the old value in a local-only result.
         preference_categories = tuple(values["categories"] or ())
@@ -434,7 +439,7 @@ class ConversationManager:
                           preference_categories if blocked_categories else requirements.categories),
                           frozenset(confirmed), frozenset(unresolved),
                           frozenset(ambiguous_attributes), needs_model, blocked_categories, turn_issue, unsupported_items,
-                          unsupported_city)
+                          unsupported_city, recovery_note, recovery_handled)
 
     def merge(self, local, model, messages=()):
         # Bind numeric model claims to the actual unit-bearing buyer evidence.
@@ -500,9 +505,11 @@ class ConversationManager:
             preferences, requirements.categories
         ))
 
-    def resolve(self, messages, gemma, *, require_model):
+    def resolve(self, messages, gemma, *, require_model, recovery_listings=None, recovery_history=None):
         messages = active_dialog(messages)
-        local = self.local(messages)
+        local = self.local(messages, recovery_listings=recovery_listings, recovery_history=recovery_history)
+        if local.recovery_handled:
+            return local, None
         if not require_model and not local.needs_model:
             return local, None
         model, trace = gemma(messages, full_history=local.needs_model)
@@ -538,7 +545,8 @@ class ConversationManager:
             return self.merge(local, model, messages), trace
         if model.intent in {"off_topic", "ambiguous"} and not local.turn_issue:
             previous_messages = messages[:-2] if len(messages) > 1 else []
-            previous = self.local(previous_messages)
+            previous = self.local(previous_messages, recovery_listings=recovery_listings,
+                                  recovery_history=recovery_history)
             last = messages[-1]["text"]
             turn = parse_turn(last, set(), previous.requirements)
             explicit = turn.values or turn.preferences or any(pattern.search(last) for pattern in WORDS.values())

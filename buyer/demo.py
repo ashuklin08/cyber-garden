@@ -17,6 +17,7 @@ from buyer.conversation import ConversationManager
 from buyer.indexed import SearchError, SearchProvider
 from buyer.lab import QUERY, compare
 from buyer.model import ModelError, ModelTrace, extract
+from buyer.recovery import RecoveryHistory, recovery_response
 from buyer.selection import LABELS, Selection, actual_feature, describe_condition, select
 
 UI = Path(__file__).with_name("ui")
@@ -40,6 +41,7 @@ class DemoServer(ThreadingHTTPServer):
         self.listings = read_catalog(self.catalog)
         self.titles = {item["id"]: item["title"] for item in self.catalog}
         self.gateway_slot = BoundedSemaphore(1)
+        self.recovery_history = RecoveryHistory()
         self.visual_slot = BoundedSemaphore(1)
         self.visual_service = None
         self.visual_setup = None
@@ -268,7 +270,9 @@ class Handler(BaseHTTPRequestHandler):
             resolve_started = time.perf_counter()
             try:
                 query, trace = ConversationManager().resolve(
-                    messages, self._gemma, require_model=True
+                    messages, self._gemma, require_model=True,
+                    recovery_listings=self.server.listings if self.path == "/api/buy" and not self.server.provider else None,
+                    recovery_history=self.server.recovery_history
                 )
             finally:
                 if self._stages is not None:
@@ -290,7 +294,7 @@ class Handler(BaseHTTPRequestHandler):
             data.update({"query": QUERY, "trace": asdict(trace)})
         else:
             try:
-                data = self._buyer_result(query, trace)
+                data = self._buyer_result(query, trace, messages)
             except (SearchError, ValueError):
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Не удалось получить полный результат поиска."})
                 return
@@ -310,7 +314,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._stages["gemma_ms"] = (time.perf_counter() - started) * 1000
             self.server.gateway_slot.release()
 
-    def _buyer_result(self, query, trace):
+    def _buyer_result(self, query, trace, messages=()):
         requirements = query.requirements
         clarification = query.attribute_questions() if not query.questions() else ()
         listings, titles = self.server.listings, self.server.titles
@@ -330,6 +334,11 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 if self._stages is not None:
                     self._stages["search_ms"] = (time.perf_counter() - search_started) * 1000
+        response = result.response if result else None
+        if response and response["status"] == "no_match" and not self.server.provider:
+            response, suggestions = recovery_response(listings, requirements, query.preferences, result, query.recovery_note)
+            if messages:
+                self.server.recovery_history.remember(messages, response, query, suggestions)
         items = {
             listing_id for option in (result.response.get("options", []) if result else [])
             for listing_id in option["listing_ids"]
@@ -346,7 +355,7 @@ class Handler(BaseHTTPRequestHandler):
                 conditions.append({"label": LABELS[key], "value": describe_condition(key, condition)})
 
         return {
-            "response": result.response if result else None,
+            "response": response,
             "clarification": clarification,
             "trace": asdict(trace),
             "requirements": core_fields + conditions,

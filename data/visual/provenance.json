@@ -230,6 +230,102 @@
       "cell": 6,
       "synthetic": true,
       "sha256": "b6741808f5dfef39e015c99849859a8092bb4613ed25ac2ab1a56349309948d9"
+    },
+    {
+      "path": "products/demo-1-1-09.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "prompt": "Varnished pine student desk with straight legs",
+      "synthetic": true,
+      "sha256": "f3eece16b109e476dbc7f19c6c04c5786c0ada7ebd8f12702a61d20fdcce2894"
+    },
+    {
+      "path": "products/demo-1-1-11.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 2,
+      "prompt": "Gray laminate office desk with side panels",
+      "synthetic": true,
+      "sha256": "d116a263da2e7a93ddb30b4c7b179b150331a5d3ba078c619f9e26a0ba780209"
+    },
+    {
+      "path": "products/demo-2-1-02.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "prompt": "White desk on dark metal legs",
+      "synthetic": true,
+      "sha256": "b55ef554c988adee2a3eb7d4a785baa18f8d874b8cea6aefc6754b1c53ce82bd"
+    },
+    {
+      "path": "products/demo-2-1-09.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "prompt": "Solid wood desk with aged varnish",
+      "synthetic": true,
+      "sha256": "c10ed61e92503c4e5d3e61c0587e5650cb5f226c15a203590e477f8fd095a0e9"
+    },
+    {
+      "path": "products/demo-1-2-05.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "prompt": "Compact gray fabric swivel chair without arms",
+      "synthetic": true,
+      "sha256": "76de9b765b9c8da08cca5a1fb3477e60c2dd1c9922ba13618e074e516b3d7767"
+    },
+    {
+      "path": "products/demo-2-2-01.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 2,
+      "prompt": "Royal blue fabric swivel chair on casters",
+      "synthetic": true,
+      "sha256": "2e12b3e7192192bf635f9096b7e79a124865f01cdce6b9e0c62acc31be001956"
+    },
+    {
+      "path": "products/demo-2-2-03.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "prompt": "Black mesh chair with a metal caster base",
+      "synthetic": true,
+      "sha256": "ef681e6f327c85afa4c2956a062816d5c744a060049030c0c129fc94f628a575"
+    },
+    {
+      "path": "products/demo-2-2-09.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "prompt": "Beige upholstered student chair",
+      "synthetic": true,
+      "sha256": "6c5dddda8094c7250d83f4246c773b331c03d2012d116c46683fa02ecada272b"
+    },
+    {
+      "path": "products/demo-2-3-01.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "prompt": "Black flexible gooseneck study lamp",
+      "synthetic": true,
+      "sha256": "91d4114d218f7dc99ac64bc7438b4a640a62289f87e6036867735cd61375d84e"
+    },
+    {
+      "path": "products/demo-2-3-05.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 2,
+      "prompt": "Green metal-shade desk lamp with cord switch",
+      "synthetic": true,
+      "sha256": "ba80df4e7004cfcbb5bbbc37cf52ac39553cde3ce08c62c8594e779cba495bdf"
+    },
+    {
+      "path": "products/demo-1-3-11.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "prompt": "Gray metal desk lamp with two articulated pivots",
+      "synthetic": true,
+      "sha256": "2d83635f4115ae77282d64609ed7c5b19944044e24b076be371cf953fd6a46cf"
+    },
+    {
+      "path": "products/demo-1-3-09.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "prompt": "Small ivory desk lamp with a round base",
+      "synthetic": true,
+      "sha256": "5785f9e06c954d4331a9320b509ae05558820df7d0af0a71fe4877e88a021fb8"
     }
   ]
 }

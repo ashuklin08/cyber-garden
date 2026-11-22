@@ -9,6 +9,7 @@ from pathlib import Path
 from buyer.contracts import decode_json, read_catalog, read_messages
 from buyer.conversation import ConversationManager
 from buyer.model import ModelError, extract
+from buyer.recovery import recovery_response
 from buyer.selection import select
 
 
@@ -24,7 +25,7 @@ def main():
     try:
         request = read_messages(decode_json(sys.stdin.buffer.read()))
         listings = read_catalog(decode_json(args.catalog.read_bytes()))
-        query, _ = ConversationManager().resolve(request, extract, require_model=True)
+        query, _ = ConversationManager().resolve(request, extract, require_model=True, recovery_listings=listings)
         attribute_questions = query.attribute_questions() if not query.questions() else ()
         if query.decision_questions():
             response = {"status": "clarify", "questions": list(query.decision_questions())}
@@ -35,7 +36,8 @@ def main():
             response = {"status": "clarify", "questions": [{"field": "categories", "text":
                         "Уточните требования к товарам комплекта. " + " ".join(attribute_questions)}]}
         else:
-            response = select(listings, query.requirements, query.preferences).response
+            result = select(listings, query.requirements, query.preferences)
+            response, _ = recovery_response(listings, query.requirements, query.preferences, result, query.recovery_note)
     except ModelError as error:
         print(f"run: {error}", file=sys.stderr)
         return 2

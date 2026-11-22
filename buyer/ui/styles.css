@@ -736,6 +736,9 @@ body::after {
 .items li { align-items:start; }
 .results-empty { border:1px dashed #cae4f7; padding:25px; border-radius:16px; background:#fff; display:grid; gap:8px; }
 .results-empty p { font-size:.83rem; color:#757575; }
+.recovery-options { margin: 0; padding-inline-start: 24px; display: grid; gap: 10px; }
+.recovery-options li { padding: 6px 0; }
+.recovery-options button { margin-top: 6px; }
 .thinking-bubble { position:relative; }
 .thinking-dots { color:#00aaff; display:inline-block; margin-top:4px; font-size:17px; letter-spacing:5px; animation: thinking-soft 1.3s ease-in-out infinite; }
 @keyframes thinking-soft { 50% {opacity:.28;} }

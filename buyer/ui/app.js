@@ -453,12 +453,36 @@ function renderResults(data) {
     results.append(bar, count ? grid : element("p", "filter-empty", "Снимите локальные фильтры, чтобы увидеть варианты."));
   }
   if (response.status === "no_match") {
-    results.append(element("h2", null, "Подходящих вариантов нет"),
-      element("p", null, response.message));
+    renderNoMatch(response.message);
   } else if (response.status === "clarify") {
     results.append(element("p", null, response.questions.map(question => question.text).join("\n")));
   }
   results.append(jsonDetails(response));
+}
+
+function renderNoMatch(message) {
+  const panel = element("div", "results-empty");
+  panel.append(element("h2", null, "Подходящих вариантов нет"));
+  for (const paragraph of message.split("\n\n")) {
+    if (!paragraph.startsWith("Проверенные варианты:\n")) {
+      panel.append(element("p", null, paragraph));
+      continue;
+    }
+    panel.append(element("h3", null, "Проверенные варианты"));
+    const options = element("ol", "recovery-options");
+    for (const line of paragraph.split("\n").slice(1)) {
+      const offer = /^([1-3])\. (.+)$/.exec(line);
+      if (!offer) continue;
+      const item = element("li");
+      const button = element("button", "subtle", "Выбрать вариант " + offer[1]);
+      button.type = "button";
+      button.addEventListener("click", () => submit("Вариант " + offer[1]));
+      item.append(element("p", null, offer[2]), button);
+      options.append(item);
+    }
+    panel.append(options);
+  }
+  results.append(panel);
 }
 
 function assistantReply(response, unchanged = false) {

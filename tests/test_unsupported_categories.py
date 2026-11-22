@@ -76,9 +76,10 @@ class UnsupportedCategoryTest(unittest.TestCase):
         state, body = self.resolve(dialog("Стол не шире 90 см в Таганроге, бюджет 5000 рублей"), ModelQuery(gold, ()), rows)
         self.assertEqual(state.requirements, gold)
         self.assertFalse(state.blocked_categories)
-        self.assertEqual(body["response"], {"status": "no_match", "message":
-            "Город самовывоза — Таганрог. Для «Стол» нет подтверждённого соответствия условию «ширина стола ≤ 90 см» "
-            "(ближайшее подтверждённое значение: 120 см). Какую характеристику можно изменить или рассмотреть другой город?"})
+        self.assertEqual(body["response"]["status"], "no_match")
+        self.assertIn("Ширина стола ≤ 90 см", body["response"]["message"])
+        self.assertIn("≤ 120 см", body["response"]["message"])
+        self.assertIn("1 000 ₽", body["response"]["message"])
         self.assertEqual(body["items"], {})
 
     def test_supported_choice_after_refusal_unblocks_and_does_not_restore_bundle(self):

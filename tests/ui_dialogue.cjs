@@ -108,6 +108,22 @@ async function main() {
     assert.equal(all(t.byId('results')).some(n => n.tag === 'p' && n.textContent === 'Подходящих ламп нет'), true);
     assert.equal(all(t.byId('results')).some(n => n.className === 'pane option'), false);
   });
+  await test('recovery action sends a normal reply and waits for the new backend result', async () => {
+    const t = create();
+    const message = 'Проверьте бюджет.\n\nПроверенные варианты:\n1. Увеличить бюджет до 5 700 ₽.\n\nВыберите вариант.';
+    t.replies.push({...t.state, response: {status: 'no_match', message}});
+    await t.context.submit('Стол, бюджет 5000 рублей');
+    const button = all(t.byId('results')).find(node => node.textContent === 'Выбрать вариант 1');
+    assert.equal(t.requests.length, 1);
+    assert.equal(all(t.byId('results')).some(node => node.className === 'pane option'), false);
+    t.replies.push(t.ok);
+    button.handlers.click();
+    await new Promise(setImmediate);
+    assert.equal(t.requests.length, 2);
+    assert.equal(t.requests[1].messages[1].text, message);
+    assert.equal(t.requests[1].messages[2].text, 'Вариант 1');
+    assert.equal(all(t.byId('results')).some(node => node.className === 'pane option'), true);
+  });
   await test('equal verified results are described honestly', async () => {
     const t = create(); t.replies.push(t.ok, t.ok);
     await t.context.submit('Стол'); await t.context.submit('Столик');

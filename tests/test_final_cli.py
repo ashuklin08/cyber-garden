@@ -13,7 +13,7 @@ from unittest.mock import patch
 from jsonschema import Draft202012Validator
 
 from buyer.contracts import ROOT, read_catalog
-from buyer.selection import select
+from buyer.selection import rubles, select
 from tests.cli_support import cli_command
 from tests.fixtures import product
 from tests.test_buyer import requirements
@@ -126,8 +126,28 @@ class FinalCliTest(unittest.TestCase):
                                for cat in categories) + f". Таганрог. Бюджет {budget} рублей."
             response = self.answer(rows, dialog(text))
             expected = select(read_catalog(rows), requirements(categories=categories, budget_rub=budget,
-                                                               width_cm=[["lte", 100]])).response
-            self.assertEqual(response, expected)
+                                                               width_cm=[["lte", 100]]))
+            self.assertEqual(response["status"], expected.response["status"])
+            if response["status"] == "no_match":
+                self.assertEqual(set(response), {"status", "message"})
+                if expected.minimum_total_rub is not None:
+                    self.assertIn(rubles(expected.minimum_total_rub - budget), response["message"])
+            else:
+                self.assertEqual(response, expected.response)
+
+    def test_recovery_choice_round_trips_through_official_cli(self):
+        rows = [product("only-table", "table", 5700, 90)]
+        messages = dialog("Стол не шире 90 см. Таганрог. Бюджет 5000 рублей.")
+        response = self.answer(rows, messages)
+        self.assertEqual(response["status"], "no_match")
+        self.assertIn("5 700 ₽", response["message"])
+        messages.extend([{"role": "assistant", "text": response["message"]},
+                         {"role": "user", "text": "Вариант 1"}])
+        confirmed = self.answer(rows, messages)
+        self.assertEqual(confirmed["status"], "ok")
+        self.assertEqual(confirmed["options"][0]["listing_ids"], ["only-table"])
+        self.assertEqual(confirmed["options"][0]["total_rub"], 5700)
+        self.assertEqual(len(self.calls), 1)
 
     def test_gateway_failure_has_empty_stdout_and_bounded_attempts(self):
         for status, expected_calls in ((429, 1), (503, 2)):
