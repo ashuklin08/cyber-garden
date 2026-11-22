@@ -867,3 +867,114 @@ body:has(.bundle-detail:not([hidden])) .toast { bottom: min(65vh, 330px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* Visual theme from Подбор.html. Existing markup, controls and layout stay intact. */
+:root {
+  --ink: #1a1a1a;
+  --muted: #77736f;
+  --line: #e6e4e1;
+  --avito-gray: #f2f1f0;
+  --avito-gray-hover: #e8e6e3;
+  --avito-blue-soft: #e5f6ff;
+  --avito-green: #04a34b;
+  --radius: 28px;
+  font-family: "Onest", "Golos Text", system-ui, sans-serif;
+}
+body { background: #fff; -webkit-font-smoothing: antialiased; }
+body::before {
+  background: radial-gradient(#d9d6d2 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: .55;
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, #000 0%, transparent 75%);
+  animation: none;
+  transform: none;
+}
+body::after {
+  background: radial-gradient(ellipse at 90% 60%, #f7f6f5 0%, transparent 65%);
+  opacity: .4;
+  animation: none;
+}
+.avito-topbar { background: #f2f1f0; color: #77736f; border-bottom: 1px solid var(--line); }
+.event { color: var(--ink); }
+.event-divider { background: #d9d6d2; }
+.header { background: #ffffffeb; border-color: var(--line); backdrop-filter: blur(12px); }
+.brand { color: var(--ink); font-weight: 800; letter-spacing: -.035em; }
+nav { border-radius: 16px; background: var(--avito-gray); }
+nav a { border-radius: 12px; box-shadow: 0 1px 2px #0000000f; }
+.hero {
+  background: #f2f1f0;
+  color: var(--ink);
+  border: 1px solid #eceae7;
+  border-radius: 32px;
+  box-shadow: none;
+}
+.hero::before {
+  background: repeating-radial-gradient(ellipse at 80% 120%, transparent 0 92px, #e3e0dc80 93px 94px, transparent 95px 150px);
+  opacity: .6;
+  animation: none;
+  transform: none;
+}
+.hero::after { background: none; animation: none; }
+.hero h1 { font-weight: 800; letter-spacing: -.035em; line-height: 1.02; color: var(--ink); }
+.hero p { color: #65625f; line-height: 1.65; }
+.eyebrow { color: #585550; }
+.status-dot { background: #04c35a; box-shadow: 0 0 0 4px #c9f2da; }
+.hero-chips button { border-radius: 999px; background: #ffffffb3; border-color: transparent; color: var(--ink); box-shadow: none; }
+.hero-chips button:hover { background: #fff; border-color: var(--line); }
+.hero .ai-hub { background: #fff; color: var(--avito-blue); border-color: var(--line); box-shadow: 0 20px 50px -20px #1a1a1a40; border-radius: 30px; }
+.hero .ai-hub::before { border-color: #bdb9b440; }
+.hero .orbit-node { border-radius: 18px; border-color: #fff; box-shadow: 0 8px 24px -12px #00000033; }
+.hero .orbit-node.white { background: #fff; color: var(--ink); }
+.hero .orbit-node.blue { background: #c9f2da; color: var(--ink); }
+.hero .orbit-node.pos-tr { background: #ffd9dc; }
+.hero .orbit-node.pos-bot { background: #ffefb0; }
+.orbit-lines circle { stroke: #d9d6d2; }
+.pane { border-color: var(--line); border-radius: 28px; box-shadow: none; }
+.evidence { background: #f2f1f0; }
+.pane-heading p, .result-heading p, .model-trace, .voice-hint { color: var(--muted); }
+h2 { color: var(--ink); letter-spacing: -.035em; }
+.subtle, .prompts button, .city-bar button { border-radius: 12px; color: var(--ink); }
+.city-bar button[aria-pressed="true"] { background: #e5f6ff; color: #006c9f; border-color: #a8dff8; }
+.bubble { border-radius: 20px; }
+.bubble.assistant { background: #f2f1f0; color: var(--ink); border-bottom-left-radius: 6px; }
+.bubble.user { background: #e5f6ff; color: var(--ink); border-bottom-right-radius: 6px; }
+.messages { scrollbar-width: thin; scrollbar-color: #e0ddda transparent; }
+#composer { border: 1px solid var(--line); border-radius: 20px; background: #f7f6f5; box-shadow: none; }
+#composer:focus-within { border-color: #00aaff; box-shadow: 0 0 0 3px #00aaff14; }
+.primary { border-radius: 12px; background: #00aaff; color: #fff; }
+.primary:hover { background: #0099e6; }
+.compose-tool { border-radius: 12px; background: transparent; color: #77736f; }
+.compose-tool:hover { background: #e8e6e3; }
+.conditions > div { border-color: #e1ded9; }
+.conditions dd { color: var(--ink); }
+.funnel-box, .tele-card { border-radius: 16px; background: #fff; border-color: var(--line); }
+.quick-filter { background: #f7f6f5; border-color: var(--line); border-radius: 14px; }
+.option { border-color: var(--line); border-radius: 28px; box-shadow: none; }
+.option:first-child { border-color: var(--line); box-shadow: none; }
+.option:hover { box-shadow: 0 24px 50px -30px #00000059; }
+.option-summary { background: #fff; border-color: var(--line); }
+.option:first-child .option-summary { background: #f7f6f5; }
+.total { color: var(--ink); letter-spacing: -.035em; }
+.reserve { color: #128541; }
+.card-photo, .photo-placeholder { background: #f2f1f0; }
+.photo-badge { background: #fffffff0; color: #585550; border-radius: 8px; box-shadow: 0 1px 2px #0000000a; }
+.items li { border-color: var(--line); }
+.item-title { color: var(--ink); }
+.add-bundle { border-radius: 12px; background: #e5f6ff; border-color: transparent; color: #006c9f; }
+.add-bundle.selected { background: #ddf6e7; color: #126b34; border-color: #c9f2da; }
+.sort-group, .sort-group button { border-radius: 12px; }
+.sort-group { background: #f2f1f0; }
+.proof, .json-details { border-color: var(--line); color: #585550; }
+.json-details { border-radius: 20px; background: #fff; }
+pre { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.results-empty, .visual-card, .visual-panel { border-color: var(--line); border-radius: 28px; }
+.visual-upload { background: #f7f6f5; border-color: #d9d6d2; border-radius: 16px; }
+.visual-example { border-color: var(--line); border-radius: 12px; }
+.bundle-dock { background: #fff; border-color: var(--line); border-radius: 24px; box-shadow: 0 20px 50px -20px #1a1a1a40; }
+.bundle-detail { border-color: var(--line); }
+.toast { background: #1a1a1a; border-radius: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+.hero .eyebrow { background: #fff; color: #585550; border: 1px solid #e6e4e180; border-radius: 999px; }
+.option-cover .photo-badge { font-size: .62rem; font-weight: 600; padding: 5px; }
