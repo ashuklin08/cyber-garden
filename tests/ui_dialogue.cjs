@@ -516,16 +516,21 @@ async function main() {
     assert.equal(t.timers.size, 0);
     assert.equal(t.byId('visual-search').disabled, false);
   });
-  await test('catalog photo is joined by real ID and missing photos use placeholders', async () => {
+  await test('table cards prefer their listing photo and label a fallback as an example', async () => {
     const t = create('standard', {total: 2, cities: ['Азов'], photos: {
       t1: {path: 'products/stock.webp', synthetic: true}, t2: {path: 'https://example.com/random.jpg'},
     }});
     t.replies.push(dataWith(t, [option(['t1']), option(['t2'])]));
     await t.context.submit('Стол');
     const cards = all(t.byId('results'));
-    assert.deepEqual(cards.filter(node => node.tag === 'img').map(node => node.src), ['/visual-images/products/stock.webp']);
+    const images = cards.filter(node => node.tag === 'img');
+    assert.deepEqual(images.map(node => node.src), ['/visual-images/products/stock.webp', '/table-preview.webp']);
     assert.equal(cards.filter(node => node.className === 'card-photo photo-placeholder').length, 2);
     assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), true);
+    assert.equal(textPresent(t, 'span', 'Пример стола'), true);
+    images[0].handlers.error();
+    assert.equal(images[0].src, '/table-preview.webp');
+    assert.equal(textPresent(t, 'span', 'Демонстрационное фото'), false);
     assert.equal(textPresent(t, 'p', 'ID t1'), true);
     assert.equal(textPresent(t, 'p', 'Таганрог'), true);
     assert.equal(textPresent(t, 'strong', new Intl.NumberFormat('ru-RU').format(1000) + ' ₽'), true);

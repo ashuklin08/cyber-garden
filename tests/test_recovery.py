@@ -240,6 +240,32 @@ class RecoveryDialogueTest(unittest.TestCase):
         confirmed = self.resolve([*messages, user("Вариант 1")], catalog)
         self.assertEqual((confirmed.requirements.city_id, confirmed.requirements.budget_rub), ("azov", 1800))
 
+    def test_short_width_reply_does_not_accept_combined_edit_for_multiple_items(self):
+        catalog, messages, offers, before = self.start([
+            row("t", "table", 1700, 100),
+            row("c", "chair", 2000),
+            row("l", "lamp", 500),
+        ], "В Таганроге нужен стол шириной до 80 см, кресло и лампа. Бюджет 3000 рублей.")
+        choice = next(i for i, item in enumerate(offers, 1)
+                      if {change.field for change in item.changes} == {"categories", "width_cm"})
+        partial = self.resolve([*messages, user("Можно до 100 см.")], catalog)
+        self.assertEqual((partial.requirements, partial.recovery_note), (before.requirements, CHOOSE))
+        accepted = self.resolve([*messages, user(f"Вариант {choice}")], catalog)
+        self.assertEqual(accepted.requirements.categories, ("table", "lamp"))
+        self.assertEqual(accepted.requirements.width_cm, (Comparison("lte", Decimal(100)),))
+        self.assertEqual(self.gemma.call_count, 1)
+
+    def test_decline_and_undo_without_an_available_offer_keep_known_conditions(self):
+        catalog, messages, offers, before = self.start([],
+            "Стол. Таганрог. Бюджет 6000 рублей.")
+        self.assertFalse(offers)
+        declined = self.resolve([*messages, user("Нет. Оставь как было.")], catalog)
+        self.assertEqual((declined.requirements, declined.recovery_note), (before.requirements, DECLINED))
+        undo = self.resolve([*messages, user("Отмени последнее изменение.")], catalog)
+        self.assertEqual(undo.requirements, before.requirements)
+        self.assertIn("Нет принятого предложения", undo.decision_questions()[0]["text"])
+        self.assertEqual(self.gemma.call_count, 1)
+
     def test_changed_catalog_does_not_apply_stale_offer(self):
         _, messages, _, before = self.start([row("t", "table", 1500, 90)],
             "Стол. Таганрог. Бюджет 500 рублей.")

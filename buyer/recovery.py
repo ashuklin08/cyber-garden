@@ -208,7 +208,7 @@ def offer_block(text):
     return next((part for part in text.split("\n\n") if part.startswith(HEADING + "\n")), None)
 
 
-DECLINE = re.compile(r"(?:нет(?:,?\s*оставь(?:те)?\s+как\s+было)?|"
+DECLINE = re.compile(r"(?:нет(?:[,.!]?\s*оставь(?:те)?\s+как\s+было)?|"
                      r"оставь(?:те)? как было|без изменений|отказываюсь|ничего не меняй)")
 UNDO = re.compile(r"(?:верни(?:те)? (?:как было|прежние условия)|отмени(?:те)? (?:изменение|последнее изменение))")
 NUMBERED = re.compile(r"(?:(?:давай(?:те)?|выбираю|принимаю) )?(?:вариант )?([1-3])(?: вариант)?")
@@ -234,8 +234,12 @@ def _single_edit(text, current):
             return "categories", tuple(key for key in current.categories if key != removed)
     if MEASURE_REPLY.fullmatch(text):
         field = "width_cm" if text.endswith("см") else "color_temperature_k"
-        turn = parse_turn(text.split(" ", 1)[1] if text.startswith(("можно ", "давай ")) else text,
-                          {field}, current)
+        category = "table" if field == "width_cm" else "lamp"
+        if category not in current.categories:
+            return None
+        measurement = re.sub(r"^(?:можно|давай) ", "", text)
+        # The unit identifies the intended item even in a multi-item bundle.
+        turn = parse_turn(f"{CATEGORIES[category]} {measurement}", set(), current)
         if field in turn.values:
             parsed = [Comparison(op, value) for op, value in turn.values[field]]
             old = getattr(current, field)

@@ -234,16 +234,33 @@ function markCity(city) {
   for (const [name, button] of cityButtons) button.setAttribute("aria-pressed", String(city === name));
 }
 
-function productPhoto(container, item, photo) {
-  if (typeof photo?.path !== "string" || !photoPath.test(photo.path)) return;
+function productPhoto(container, item, photo, preview = null) {
+  const hasPhoto = typeof photo?.path === "string" && photoPath.test(photo.path);
+  if (!hasPhoto && !preview) return;
   const image = element("img");
-  image.src = "/visual-images/" + photo.path;
-  image.alt = (photo.synthetic ? "Демонстрационное фото: " : "") + item.title;
+  const badge = element("span", "photo-badge");
+  let usingPreview = !hasPhoto;
+  function show() {
+    const label = usingPreview ? "Пример стола" : photo.synthetic ? "Демонстрационное фото" : "";
+    image.alt = usingPreview ? label : label ? label + ": " + item.title : item.title;
+    if (label) {
+      if (!badge.textContent) container.append(badge);
+      badge.textContent = label;
+    }
+    image.src = usingPreview ? preview : "/visual-images/" + photo.path;
+  }
   image.loading = "lazy";
-  const badge = photo.synthetic ? element("span", "photo-badge", "Демонстрационное фото") : null;
-  image.addEventListener("error", () => { image.remove(); badge?.remove(); });
+  image.addEventListener("error", () => {
+    if (preview && !usingPreview) {
+      usingPreview = true;
+      show();
+    } else {
+      image.remove();
+      badge.remove();
+    }
+  });
   container.append(image);
-  if (badge) container.append(badge);
+  show();
 }
 
 const selected = new Map();
@@ -319,7 +336,9 @@ function buildOption(option, index, data) {
   const covers = element("div", "option-cover");
   for (const id of option.listing_ids) {
     const cover = element("div", "card-photo photo-placeholder");
-    productPhoto(cover, data.items[id], Object.hasOwn(catalogPhotos, id) ? catalogPhotos[id] : null);
+    const item = data.items[id];
+    const photo = Object.hasOwn(catalogPhotos, id) ? catalogPhotos[id] : null;
+    productPhoto(cover, item, photo, item.category_id === "table" ? "/table-preview.webp" : null);
     covers.append(cover);
   }
   card.append(covers);

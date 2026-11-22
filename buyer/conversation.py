@@ -9,7 +9,7 @@ from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY,
                                 TEMPERATURE, WIDTH, MEASURE, PRICE_PER_ITEM, RELATIVE_BUDGET,
                                 unsupported_measurement, Preference, normalize, parse_turn, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
-from buyer.recovery import (UNDO, Suggestion, interpret_reply, offer_block,
+from buyer.recovery import (DECLINE, DECLINED, UNDO, Suggestion, interpret_reply, offer_block,
                             recovery_response)
 from buyer.selection import select
 
@@ -105,6 +105,10 @@ class LocalState:
     recovery_handled: bool = False
 
     def decision_questions(self):
+        if self.turn_issue == "recovery_no_undo":
+            return ({"field": "categories", "text":
+                     "Нет принятого предложения, которое можно отменить. Текущие условия сохранены. "
+                     "Какое условие вы хотите изменить?"},)
         if self.turn_issue == "recovery_stale":
             return ({"field": "categories", "text":
                      "Предложение больше не подтверждается текущим каталогом. Укажите, какое условие изменить."},)
@@ -277,7 +281,7 @@ class ConversationManager:
                     else:
                         current = base
                         recovery_note = reaction
-                        if not suggestions:
+                        if not suggestions and reaction != DECLINED:
                             turn_issue = "recovery_stale"
                     values = _recovery_values(current)
                     preferences = _filter_preferences(base_preferences, current.categories)
@@ -295,7 +299,19 @@ class ConversationManager:
                     recovery_message = None
                     continue
             recovery_message = None
-            if last_accepted and UNDO.fullmatch(text.strip(" .!")):
+            recovery_command = text.strip(" .!?")
+            if (recovery_listings is not None and not pending and current.city_id
+                    and current.categories and current.budget_rub is not None
+                    and DECLINE.fullmatch(recovery_command)):
+                recovery_handled = True
+                recovery_note = DECLINED
+                continue
+            if recovery_listings is not None and UNDO.fullmatch(recovery_command):
+                if last_accepted is None:
+                    turn_issue = "recovery_no_undo"
+                    recovery_handled = True
+                    pending = set()
+                    continue
                 before, applied, previous_preferences = last_accepted
                 modified = {key: getattr(before, key) for key in EMPTY
                             if getattr(before, key) != getattr(applied, key)}

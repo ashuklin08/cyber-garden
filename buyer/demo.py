@@ -22,10 +22,11 @@ from buyer.selection import LABELS, Selection, actual_feature, describe_conditio
 
 UI = Path(__file__).with_name("ui")
 ASSETS = {
-    "/": ("index.html", "text/html; charset=utf-8"),
-    "/app.js": ("app.js", "application/javascript; charset=utf-8"),
-    "/styles.css": ("styles.css", "text/css; charset=utf-8"),
-    "/workspace.webp": ("workspace.webp", "image/webp"),
+    "/": (UI / "index.html", "text/html; charset=utf-8"),
+    "/app.js": (UI / "app.js", "application/javascript; charset=utf-8"),
+    "/styles.css": (UI / "styles.css", "text/css; charset=utf-8"),
+    "/workspace.webp": (UI / "workspace.webp", "image/webp"),
+    "/table-preview.webp": (ROOT / "data/visual/products/demo-1-1-02.webp", "image/webp"),
 }
 CSP = "default-src 'self'; img-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 
@@ -106,8 +107,8 @@ class Handler(BaseHTTPRequestHandler):
             self._visual_status()
         elif self.path.startswith("/visual-demo/"):
             self._visual_demo()
-        elif asset and (UI / asset[0]).is_file():
-            self._send(HTTPStatus.OK, (UI / asset[0]).read_bytes(), asset[1])
+        elif asset and asset[0].is_file():
+            self._send(HTTPStatus.OK, asset[0].read_bytes(), asset[1])
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "Страница не найдена."})
 
