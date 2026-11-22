@@ -72,7 +72,7 @@ SHORT_BUDGET_REPLY = re.compile(
     rf"(?:давай(?:те)?|тогда|пусть будет|можно)\s+(?:до\s+)?{NUMBER}"
     rf"(?:\s*(?:{MONEY_UNIT}))?\s*[.!?]*")
 PURCHASE_REQUEST = re.compile(r"^(?:пожалуйста[, ]+)?(?:найти|найди(?:те)?|подобрать|подбери(?:те)?|"
-                              r"подыщи|поищи|покажи(?:те)?|ищу|хочу купить|купить)\b")
+                              r"подыщи|поищи|покажи(?:те)?|ищу|хочу купить|купить|только|лишь)\b")
 BARE_MEASURE = re.compile(rf"{NUM_START}(?P<n>{NUMBER})(?P<u>)")
 PLAIN_MEASURE = re.compile(rf"(?:(?:{'|'.join(pattern for _, pattern in OPERATIONS)})\s+|"
                           rf"[<>=≤≥]+\s*)?{NUMBER}\s*[.!?]*")
@@ -104,8 +104,14 @@ CONTEXT = re.compile(r"\b(?:как\s+раньше|как\s+в\s+первом|(?:
 CITY_CHANGE = re.compile(r"\b(?:город\s*[:—-]|(?:теперь|лучше|только|ищи|поищи|ищу|перенеси)\s+в\s+|"
                          r"(?:город|самовывоз|переезд)\s+(?:в|из)\s+)")
 # This is only a cue for semantic analysis, never proof that the next word is a city.
-PROPER_LOCATION = re.compile(r"\b(?:(?:в|из)\s+(?:городе\s+)?|город(?:е)?\s+)(?P<name>[а-яё][а-яё-]+)", re.I)
-CITY_CLEAR = re.compile(r"\bгород\s+(?:не\s*важ\w*|не\s+принципиал\w*|люб\w*)\b")
+PROPER_LOCATION = re.compile(
+    r"\b(?:(?:в|из)\s+(?:городе\s+)?|город(?:е)?\s+)"
+    r"(?!(?:бюджете|идеале|наличии|хорошем\s+состоянии|отличном\s+состоянии)\b)"
+    r"(?P<name>[а-яё][а-яё-]+)", re.I)
+CITY_CLEAR = re.compile(r"\b(?:город\s+(?:не\s*важ\w*|не\s+принципиал\w*|не\s+имеет\s+значения|люб\w*)|"
+                        r"любой\s+город|без\s+привязки\s+к\s+городу)\b")
+CITY_ONLY_REPLY = re.compile(r"(?:нет[ ,]+)?(?:(?:тогда|теперь|давай|давайте)\s+)?"
+                             r"(?:лучше\s+)?(?:в\s+)?\s*[.!?]*")
 NEGATED_CITY = re.compile(r"\bне\s+(?:в\s+|из\s+)?$")
 NEGATED_MEASURE = re.compile(rf"\bне\s+(?:(?:ровно|точно|до|от)\s+)?{NUMBER}")
 
@@ -147,6 +153,7 @@ class BudgetReading:
     amount: int | None = None
     uncertain: bool = False
     preference: str | None = None
+    alternatives: bool = False
 
 
 @dataclass(frozen=True)
@@ -276,7 +283,9 @@ def _budget(text, numeric_spans, prompted, first):
     if len(qualified) == 2 and [item[2] for item in qualified] == ["gte", "lte"]:
         qualified = qualified[1:]
     if len(qualified) != 1:
-        return BudgetReading(uncertain=True, preference=preference)
+        return BudgetReading(uncertain=True, preference=preference,
+                             alternatives=bool(re.search(r"\b(?:или|либо)\b",
+                                                         text[qualified[0][0]:qualified[-1][0]])))
     _, value, op, clause = qualified[0]
     if re.search(r"\b(?:примерно|около|доплат\w*)\b", clause):
         return BudgetReading(uncertain=True, preference=preference)
@@ -311,17 +320,23 @@ def single_item_quote(text):
     if not re.fullmatch(r"\s*[.!?]*", suffix) and not re.match(
             r"^[\s,]+(?:(?:самовывоз|забрать)\s+)?(?:в|из|город)\s+", suffix):
         return None
-    after_za = bool(re.search(r"\bза\s+$", prefix))
-    if (MEASURE.search(text) or RELATIVE_BUDGET.search(text)
-            or TEMPERATURE.search(text) and not after_za):
+    price_context = re.search(r"\b(?:за|до|не\s+дороже)\s+$", prefix)
+    if MEASURE.search(text) or RELATIVE_BUDGET.search(text):
         return None
-    if not hit["u"] and any(re.search(words, prefix) for words in FEATURE_WORDS.values()):
+    if not unit and any(re.search(words, prefix) for words in FEATURE_WORDS.values()):
         return None
     value = _value(hit, "budget_rub")
     if value != int(value) or not 0 <= value <= 10**12:
         return None
-    direct = (bool(PURCHASE_REQUEST.search(text) and after_za)
-              and not re.search(r"\b(?:комплект\w*|добав\w*|плюс|также|еще|или|либо|не)\b", text))
+    # A complete search («найди стол до 5000 в Азове») supplies price
+    # context that a bare fragment («стол. до 100») doesn't.
+    price_ceiling = price_context and (price_context[0].strip() != "до" or unit
+                                       or any(city.search(text) for city in CITIES_RE.values()))
+    direct = bool(PURCHASE_REQUEST.search(text) and price_ceiling and not SOFT.search(text)
+                  and not re.search(r"\b(?:комплект\w*|добав\w*|плюс|также|еще|или|либо|не)\b",
+                                    prefix[:price_context.start()] + suffix))
+    if TEMPERATURE.search(text) and not direct:
+        return None
     return ItemQuote(categories.pop(), int(value), direct)
 
 
@@ -339,7 +354,8 @@ def parse_turn(message, pending, current):
     if quote and quote.direct_search:
         # A single-item price cap is the total for this search. Make the unit
         # explicit before the generic measurement parser sees e.g. «5к».
-        text = MONEY.sub(f"бюджет {quote.rubles} рублей", text, count=1)
+        text = re.sub(rf"\b(?:за|до|не\s+дороже)\s+{NUMBER}(?:\s*(?:{MONEY_UNIT})(?!\w))?"
+                      r"(?:\s*(?:руб\w*\b\.?|₽))?", f"бюджет {quote.rubles} рублей", text, count=1)
         turn.single_purchase = True
     city_hits, rejected_cities = set(), set()
     for key, pattern in CITIES_RE.items():
@@ -350,6 +366,9 @@ def parse_turn(message, pending, current):
         turn.values["city_id"] = None
     elif len(city_hits) == 1:
         turn.values["city_id"] = city_hits.pop()
+        city_pattern = CITIES_RE[turn.values["city_id"]]
+        if CITY_ONLY_REPLY.fullmatch(city_pattern.sub("", text)):
+            turn.needs_model = False
     elif city_hits or CITY_CHANGE.search(text) or PROPER_LOCATION.search(message) or "city_id" in pending:
         if len(city_hits) > 1 and ALTERNATIVE.search(text):
             turn.values["city_id"] = None
@@ -412,6 +431,8 @@ def parse_turn(message, pending, current):
     elif not budget.preference and re.search(r"\bтыс(?:яч\w*)?\b", text):
         # Inverted/compound colloquial amounts are left to Gemma as a whole.
         turn.uncertain.add("budget_rub")
+    if budget.alternatives:
+        turn.ambiguous_attributes.add("budget_rub")
     if unsupported_measurement(text) and budget.amount is None:
         turn.uncertain.discard("budget_rub")
 

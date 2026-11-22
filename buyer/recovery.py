@@ -14,7 +14,7 @@ from buyer.selection import CHECK, LABELS, describe_condition, filter_listings, 
 
 
 HEADING = "Проверенные варианты:"
-NO_OPTIONS = "Среди проверенных изменений нет варианта, который позволяет собрать комплект."
+NO_OPTIONS = "Среди проверенных изменений нет варианта, который даёт результат."
 DECLINED = "Оставил исходные условия."
 CHOOSE = "Уточните выбор: назовите номер варианта, чтобы подтвердить все его изменения, или укажите новые условия."
 
@@ -74,10 +74,12 @@ def _group_options(items, rules):
 
 
 def _cause(listings, requirements, selection):
+    single_item = len(requirements.categories) == 1
     if selection.minimum_total_rub is not None:
         minimum = selection.minimum_total_rub
-        return (f"Бюджета {rubles(requirements.budget_rub)} не хватает на полный комплект. "
-                f"В городе {CITIES[requirements.city_id]} самый доступный комплект "
+        target = "подходящий товар" if single_item else "полный комплект"
+        return (f"Бюджета {rubles(requirements.budget_rub)} не хватает на {target}. "
+                f"В городе {CITIES[requirements.city_id]} самый доступный {target} "
                 f"с вашими характеристиками стоит {rubles(minimum)}. "
                 f"До него не хватает {rubles(minimum - requirements.budget_rub)}.")
     by_category, _ = filter_listings(listings, requirements)
@@ -98,7 +100,8 @@ def _cause(listings, requirements, selection):
             reasons.append(f"для «{name}» нет объявлений с условием «{LABELS[category]} {condition}»")
     if not reasons:
         return selection.response["message"]
-    return "Полный комплект недоступен. " + " ".join(reason[0].upper() + reason[1:] + "." for reason in reasons)
+    intro = "Подходящих товаров нет. " if single_item else "Полный комплект недоступен. "
+    return intro + " ".join(reason[0].upper() + reason[1:] + "." for reason in reasons)
 
 
 def build_recovery_suggestions(listings, requirements, preferences, selection):
@@ -189,7 +192,7 @@ def recovery_response(listings, requirements, preferences, selection, note=None)
     if selection.response["status"] != "no_match" or requirements.budget_rub is None:
         return selection.response, ()
     suggestions = build_recovery_suggestions(listings, requirements, preferences, selection)
-    cause = _cause(listings, requirements, selection)
+    cause = suggestions[0].reason if suggestions else _cause(listings, requirements, selection)
     paragraphs = [note, cause] if note else [cause]
     if suggestions:
         lines = []

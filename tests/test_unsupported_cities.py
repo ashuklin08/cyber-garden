@@ -98,6 +98,19 @@ class UnsupportedCitiesTest(unittest.TestCase):
         self.assert_refusal(state, body, "москве")
         self.assertEqual(state.requirements.budget_rub, 16000)
 
+    def test_new_city_without_model_evidence_cannot_reuse_old_city(self):
+        history = dialog(BASE, "Подобрал комплект", "Теперь в Краснодаре")
+        state, body = self.resolve(history, self.model(city_id="taganrog"))
+        self.assertEqual(body["response"]["status"], "clarify")
+        self.assertEqual(state.questions(), ("city_id",))
+        self.assertEqual(state.requirements.budget_rub, 15000)
+
+    def test_condition_wording_preserves_known_city(self):
+        history = dialog(BASE, "Подобрал комплект", "Хочу стол в хорошем состоянии")
+        state, _ = self.resolve(history, self.model(location("состоянии", kind="other")))
+        self.assertEqual(state.requirements.city_id, "taganrog")
+        self.assertEqual(state.requirements.budget_rub, 15000)
+
     def test_uncertain_place_and_non_city_are_ordinary_questions(self):
         for name, kind in (("чемодане", "other"), (None, "uncertain")):
             state, body = self.resolve(dialog("Стол в чемодане"), self.model(location(name, kind=kind)))

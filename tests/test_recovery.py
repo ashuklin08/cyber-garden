@@ -31,6 +31,15 @@ def assistant(text):
 
 
 class RecoveryTest(unittest.TestCase):
+    def test_single_item_explanation_uses_item_prices(self):
+        catalog = read_catalog([row("t", "table", 2500, 90)])
+        req = requirements(categories=["table"], budget_rub=2000)
+        response, offers = recovery_response(catalog, req, (), select(catalog, req))
+        self.assertEqual(response["status"], "no_match")
+        self.assertIn("не хватает на подходящий товар", response["message"])
+        self.assertNotIn("комплект", response["message"])
+        self.assertEqual(offers[0].minimum_total_rub, 2500)
+
     def suggestions(self, rows, req, preferences=()):
         catalog = read_catalog(rows)
         original = select(catalog, req, preferences)

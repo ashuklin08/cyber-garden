@@ -5,7 +5,7 @@ from buyer.model import ModelQuery
 from buyer.query_parser import parse_turn
 from buyer.contracts import read_catalog
 from buyer.recovery import recovery_response
-from buyer.selection import select
+from buyer.selection import clarification_questions, select
 from tests.fixtures import product
 from tests.test_conversation import dialog, expected
 
@@ -30,6 +30,8 @@ class ShortBudgetReplyTest(unittest.TestCase):
                 (previous, 'Найти стол за 5000 в Азове', []),
                 (previous, 'Найти стол за 5000 в Азове', [PRICE_QUESTION, 'один товар']),
                 (previous, 'Найди стол за 5 000 рублей в Азове', []),
+                (previous, 'Найти стол до 5000 в Азове', []),
+                (previous, 'Только стол за 5000 в Азове', []),
                 (previous, 'Найти стол за 5 тысяч рублей в Азове', []),
                 (previous, 'Найти стол за 5к в Азове', []),
                 (previous, 'Стол 5000 в Азове', [PRICE_QUESTION, 'цена одного товара'])]:
@@ -55,6 +57,44 @@ class ShortBudgetReplyTest(unittest.TestCase):
         turn = parse_turn('Найти лампу за 5к в Азове', set(), expected())
         self.assertEqual(turn.values['budget_rub'], 5000)
         self.assertNotIn('color_temperature_k', turn.values)
+
+    def test_simple_followups_use_short_prompt_and_keep_facts(self):
+        previous = ('Стол шириной до 100 см и кресло в Таганроге. Бюджет 8000 рублей.',
+                    'Подобрал комплект.')
+        for edit, city, budget, items in (
+                ('Покажи варианты', 'taganrog', 8000, ['table', 'chair']),
+                ('Давай 6500', 'taganrog', 6500, ['table', 'chair']),
+                ('Нет, лучше в Азове', 'azov', 8000, ['table', 'chair']),
+                ('Найти стол в Азове', 'azov', 8000, ['table'])):
+            with self.subTest(edit=edit):
+                calls = []
+                def gemma(_messages, *, full_history):
+                    calls.append(full_history)
+                    return ModelQuery(expected(), (), 'ambiguous',
+                                      requested_location=dict(type='clear', name=None, city_id=None)), None
+                state, _ = ConversationManager().resolve(dialog(*previous, edit), gemma, require_model=True)
+                self.assertEqual(calls, [False])
+                self.assertFalse(state.decision_questions())
+                self.assertEqual(state.requirements, expected(city_id=city, budget_rub=budget,
+                                                               categories=items, width_cm=[['lte', 100]]))
+
+    def test_show_results_does_not_accept_an_unconfirmed_price(self):
+        state = ConversationManager().local(dialog(
+            'Стол и кресло в Азове. Бюджет 8000 рублей.', 'Подобрал комплект.',
+            'Стол 5000 в Азове', PRICE_QUESTION, 'Покажи варианты'))
+        self.assertEqual(state.decision_questions(), ({'field': 'budget_rub', 'text': PRICE_QUESTION},))
+        self.assertEqual(state.requirements.budget_rub, 8000)
+
+    def test_gemma_cannot_choose_between_two_budget_alternatives(self):
+        history = dialog('Стол в Азове. Бюджет 8000 рублей.', 'Подобрал стол.',
+                         'Бюджет 5000 или 7000')
+        stale = ModelQuery(expected(city_id='azov', budget_rub=7000, categories=['table']), ())
+        state, _ = ConversationManager().resolve(history,
+            lambda *args, **kwargs: (stale, None), require_model=True)
+        self.assertEqual(state.questions(), ('budget_rub',))
+        question = clarification_questions(state.requirements)[0]['text']
+        state = ConversationManager().local([*history, {'role': 'assistant', 'text': question}, user('5000')])
+        self.assertEqual(state.requirements, expected(city_id='azov', budget_rub=5000, categories=['table']))
 
     def test_scope_answer_requires_buyer_amount_and_matching_question(self):
         for phrase, question in [('Найти стол за 5000 км в Азове', PRICE_QUESTION),

@@ -6,12 +6,13 @@ from dataclasses import dataclass, replace
 from buyer.anchors import WORDS, accessory_context, categories_from_dialog
 from buyer.contracts import CATEGORIES, CITIES, Requirements, read_requirements
 from buyer.query_parser import (ATTRIBUTES, BUDGET_WORD, CITIES_RE, CORE, MONEY, OWNER,
-                                TEMPERATURE, WIDTH, MEASURE, PRICE_PER_ITEM, RELATIVE_BUDGET,
+                                CITY_CLEAR, PROPER_LOCATION, PURCHASE_REQUEST, RELATIVE_BUDGET,
+                                TEMPERATURE, WIDTH, MEASURE, PRICE_PER_ITEM,
                                 unsupported_measurement, Preference, normalize, parse_turn, single_item_quote, tighten)
 from buyer.preferences import category_text, evolve, grounded, purpose_wishes
 from buyer.recovery import (DECLINE, DECLINED, UNDO, Suggestion, interpret_reply, offer_block,
                             recovery_response)
-from buyer.selection import select
+from buyer.selection import QUESTIONS as SEARCH_QUESTIONS, select
 
 EMPTY = dict(city_id=None, budget_rub=None, categories=None, width_cm=[],
              adjustable_height=None, color_temperature_k=[])
@@ -39,7 +40,8 @@ SAFE_WORDS = re.compile(
     r"до|от|см|мм|м|р|руб|тыс|лишь|только|еще|уже|ровно|точно|строго|чуть|"
     r"было|хорошо|теперь|лучше|все|то|же|очень|также|плюс|минимум|максимум|"
     r"больше|меньше|шире|выше|ниже|более|менее|хотя|убери|добавь|помоги|найди|подбери|"
-    r"хочу|ищу|нуж\w*|бюджет\w*|город\w*|самовывоз\w*|рубл\w*|тысяч\w*|"
+    r"хочу|ищу|найти|подобрать|купить|покажи|покажите|поищи|давай|давайте|"
+    r"тогда|пусть|будет|можно|нет|нуж\w*|бюджет\w*|город\w*|самовывоз\w*|рубл\w*|тысяч\w*|"
     r"миллиметр\w*|сантиметр\w*|метр\w*|кельвин\w*|температур\w*|ширин\w*|"
     r"высот\w*|регулиров\w*|регулиру\w*|фиксированн\w*|комплект\w*|покупк\w*|"
     r"желательн\w*|предпочтительн\w*|возможност\w*|идеал\w*|важ\w*|"
@@ -66,6 +68,9 @@ CHANGE_QUESTION = ("Не удалось понять, что нужно изме
 PRICE_QUESTION = "Указанное число — цена одного товара или общий бюджет на весь комплект?"
 ITEM_ANSWER = re.compile(r"(?:(?:цена|стоимость)\s+)?(?:один товар|одного товара|за (?:один товар|штуку))")
 TOTAL_ANSWER = re.compile(r"(?:общий(?: бюджет)?|бюджет|(?:на|за) (?:все|весь комплект)|весь комплект)")
+REPEAT_SEARCH = re.compile(r"(?:(?:давай(?:те)?|тогда)\s+)?(?:покажи(?:те)?|выведи|показывай)"
+                           r"(?:\s+(?:мне|тогда))?\s+(?:варианты|результаты)\s*[.!?]*")
+COMPOSITION_CONTEXT = re.compile(r"\b(?:комплект\w*|добав\w*|плюс|также|еще|не|без)\b")
 
 
 _THOUSAND_TYPO = re.compile(
@@ -234,8 +239,7 @@ class LocalState:
             if set(missing) == set(CORE):
                 return ({"field": "categories", "text": DOMAIN_QUESTION},)
             if missing:
-                from buyer.selection import QUESTIONS as CLARIFICATION_TEXT
-                return tuple({"field": field, "text": CLARIFICATION_TEXT[field]}
+                return tuple({"field": field, "text": SEARCH_QUESTIONS[field]}
                              for field in missing)
             return ({"field": "categories", "text": CHANGE_QUESTION},)
         if self.turn_issue in {"price", "chair_price"}:
@@ -257,8 +261,13 @@ class LocalState:
 
 
 def _pending(text):
-    return {key for sentence in normalize(text).split("?")[:-1]
-            for key, pattern in ANSWER_QUESTIONS.items() if re.search(pattern, sentence)}
+    text = normalize(text)
+    questions = {key for sentence in text.split("?")[:-1]
+                 for key, pattern in ANSWER_QUESTIONS.items() if re.search(pattern, sentence)}
+    # The actual API prompts are often instructions ending with a period.
+    questions.update(key for key, prompt in SEARCH_QUESTIONS.items()
+                     if normalize(prompt) in text)
+    return questions
 
 
 def _category_update(text, categories, prompted):
@@ -351,7 +360,7 @@ class ConversationManager:
                     confirmed.discard("categories")
                 continue
 
-            turn_issue = None
+            previous_issue, turn_issue = turn_issue, None
             recovery_handled = False
             recovery_note = None
             current = read_requirements(values)
@@ -453,6 +462,11 @@ class ConversationManager:
                 needs_model = True
                 pending = set()
                 continue
+            if REPEAT_SEARCH.fullmatch(text):
+                if previous_issue in {"price", "chair_price", "distance", "unsupported_size", "lumens"}:
+                    turn_issue = previous_issue
+                pending = set()
+                continue
             buyer_text = _buyer_turn(messages, index)
             text = normalize(buyer_text)
             turn = parse_turn(buyer_text, pending, current)
@@ -484,6 +498,11 @@ class ConversationManager:
             switching_product |= bool(
                 current.categories and re.search(r"\bподыщи\b", composition)
                 and not re.search(r"\b(?:еще|добавь|также)\b", composition))
+            new_search = (not turn_issue and PURCHASE_REQUEST.search(text)
+                          and not COMPOSITION_CONTEXT.search(text))
+            replacement = (categories_from_dialog([{"role": "user", "text": composition}]).categories
+                           if new_search or switching_product else None)
+            single_search |= bool(new_search and replacement and len(replacement) == 1)
             composition_history.append({"role": "user", "text": composition})
             if single_search:
                 composition_history = composition_history[-1:]
@@ -494,14 +513,12 @@ class ConversationManager:
                 semantic_refusal = False
                 composition_history = [{"role": "user", "text": composition}]
                 anchor = categories_from_dialog(composition_history)
-            if switching_product:
-                replacement = categories_from_dialog([{"role": "user", "text": composition}])
-                if replacement.categories:
-                    recognized, categories = True, list(replacement.categories)
-                    for field in ATTRIBUTES:
-                        if field not in turn.values:
-                            turn.values[field] = EMPTY[field]
-                    preferences = ()
+            if switching_product and replacement:
+                recognized, categories = True, list(replacement)
+                for field in ATTRIBUTES:
+                    if field not in turn.values:
+                        turn.values[field] = EMPTY[field]
+                preferences = ()
             mentions = any(pattern.search(composition) for pattern in WORDS.values())
             was_blocked = blocked_categories
             blocked_categories = bool(anchor.pending_unknown) or semantic_refusal
@@ -564,8 +581,9 @@ class ConversationManager:
             preferences = evolve(preferences, turn.preferences, text)
             if new_categories is not None:
                 preferences = _filter_preferences(preferences, new_categories)
-            if unsupported_measurement(text):
-                turn_issue = unsupported_measurement(text)
+            unsupported = unsupported_measurement(text)
+            if unsupported:
+                turn_issue = unsupported
                 needs_model = True
 
             if re.search(r"\bлюмен\w*\b", text):
@@ -591,11 +609,13 @@ class ConversationManager:
         if measured:
             budget = model.requirements.budget_rub
             evidence = []
-            for text in texts:
-                turn = parse_turn(text, set(), read_requirements(EMPTY))
-                if "budget_rub" in turn.values and not _unscoped_price(text):
-                    evidence.append(turn.values["budget_rub"])
-            if budget not in evidence and not (texts and RELATIVE_BUDGET.search(texts[-1]) and not MEASURE.search(texts[-1])):
+            if "budget_rub" not in local.confirmed:
+                for text in texts:
+                    turn = parse_turn(text, set(), read_requirements(EMPTY))
+                    if "budget_rub" in turn.values and (turn.single_purchase or not _unscoped_price(text)):
+                        evidence.append(turn.values["budget_rub"])
+            if (budget not in evidence and not
+                    (texts and RELATIVE_BUDGET.search(texts[-1]) and not MEASURE.search(texts[-1]))):
                 model = replace(model, requirements=replace(model.requirements, budget_rub=local.requirements.budget_rub))
         if measured or any(MONEY.search(text) for text in texts):
             # Local replay retains verified bounds, units, clears and pending answers.
@@ -656,13 +676,21 @@ class ConversationManager:
             return local, None
         model, trace = gemma(messages, full_history=local.needs_model)
         location = model.requested_location
+        last = _buyer_turn(messages, len(messages) - 1)
         raw_city = model.requirements.city_id
         if raw_city is not None and raw_city not in CITIES:
             location = location or dict(name=raw_city, type="city", city_id=raw_city)
             model = replace(model, requirements=replace(model.requirements, city_id=None))
+        elif (location is None and raw_city and "city_id" in local.unresolved
+              and PROPER_LOCATION.search(last) and not CITIES_RE[raw_city].search(normalize(last))):
+            # A new location cue needs semantic evidence before reusing a city.
+            model = replace(model, requirements=replace(model.requirements, city_id=None))
         if (location and location.get("type") in {"uncertain", "other"}
                 and "city_id" in local.confirmed and "city_id" not in local.unresolved):
             # An empty location guess on a price reply cannot revoke a known city.
+            location = None
+        if (location and location.get("type") == "clear" and "city_id" in local.confirmed
+                and not CITY_CLEAR.search(normalize(last))):
             location = None
         if location is not None:
             city = location.get("city_id")
@@ -693,9 +721,9 @@ class ConversationManager:
             previous_messages = messages[:-2] if len(messages) > 1 else []
             previous = self.local(previous_messages, recovery_listings=recovery_listings,
                                   recovery_history=recovery_history)
-            last = _buyer_turn(messages, len(messages) - 1)
             turn = parse_turn(last, set(), previous.requirements)
-            explicit = turn.values or turn.preferences or any(pattern.search(last) for pattern in WORDS.values())
+            explicit = (turn.values or turn.preferences or REPEAT_SEARCH.fullmatch(normalize(last))
+                        or any(pattern.search(last) for pattern in WORDS.values()))
             if not explicit:
                 # Semantic classification covers topics outside the small local
                 # guard vocabulary. Neither intent nor a guessed category can
