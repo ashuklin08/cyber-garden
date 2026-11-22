@@ -59,8 +59,82 @@ SHOPPING_CONTEXT = re.compile(
     r"комплект\w*|вариант\w*|как\s+раньше|тот\s+же|все\s+то\s+же|table|desk|chair|armchair|lamp)\b")
 OFF_TOPIC_QUESTION = ("Я специализируюсь на подборе товаров из каталога и не отвечаю на вопросы "
                       "по другим темам. Могу помочь выбрать стол, кресло или лампу. Что вас интересует?")
-DOMAIN_QUESTION = ("Я помогаю подбирать товары из каталога. Уточните, что вы хотите "
-                   "приобрести: например, стол, кресло или лампу.")
+DOMAIN_QUESTION = ("Не удалось понять запрос. Пожалуйста, напишите отдельно, какой товар "
+                   "вам нужен, город самовывоза и максимальный бюджет.")
+CHANGE_QUESTION = ("Не удалось понять, что нужно изменить. Пожалуйста, перепишите это "
+                   "условие другими словами.")
+
+
+_THOUSAND_TYPO = re.compile(
+    r"(\b\d+(?:[.,]\d+)?\s+)тисяч(?:а|и|у)?\b"
+    r"(?=\s*(?:$|[.,!?;]|₽|руб\w*\b|за\s+вс[её]\b|в\s+))", re.I)
+_CITY_TYPO = re.compile(
+    r"(?P<prefix>\b(?:в|из|город)\s+|^\s*)(?P<city>азев[еи]?|растов[еа]?)\b"
+    r"(?![-\w]|\s+велик)", re.I)
+_TABLE_TYPO = re.compile(
+    r"(^\s*|\b(?:нужен|ищу|купить|подбери|найди)\s+)столь\b"
+    r"(?=\s*(?:$|[.,!?;]|в\s+|до\s+\d|за\s+\d))", re.I)
+_PRODUCT_TYPO = re.compile(
+    r"(?P<prefix>\b(?:нужен|нужна|нужно|хочу|ищу|купить|подбери|найди|покажи|добавь)\s+)"
+    r"(?P<word>[а-яё]{3,9})\b", re.I)
+_INITIAL_PRODUCT_TYPO = re.compile(
+    r"(?P<prefix>^\s*)(?P<word>[а-яё]{3,9})\b"
+    r"(?=\s*(?:$|[.,!?;]|в\s+|до\s+|за\s+|бюджет\b|не\s+(?:шире|дороже)))", re.I)
+_PRODUCT_FORMS = {
+    "table": ("стол", "стола", "столу", "столом", "столе", "столы"),
+    "chair": ("кресло", "кресла", "креслу", "креслом", "кресле", "кресла"),
+    "lamp": ("лампа", "лампу", "лампы", "лампе", "лампой"),
+}
+# These are ordinary words or unsupported products one edit away from a category.
+_PRODUCT_LOOKALIKES = {
+    "столь", "сток", "столб", "рампа", "рампу", "рампы", "рампе",
+    "лапа", "лапу", "лапой", "лама", "ламу", "ламы",
+}
+
+
+def _one_typo(left, right):
+    """Accept one insertion, deletion, substitution or adjacent transposition."""
+    if left == right or abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) == len(right):
+        differences = [index for index, pair in enumerate(zip(left, right)) if pair[0] != pair[1]]
+        return len(differences) == 1 or (len(differences) == 2
+            and differences[1] == differences[0] + 1
+            and left[differences[0]] == right[differences[1]]
+            and left[differences[1]] == right[differences[0]])
+    shorter, longer = (left, right) if len(left) < len(right) else (right, left)
+    for index in range(len(longer)):
+        if longer[:index] + longer[index + 1:] == shorter:
+            return True
+    return False
+
+
+def _correct_product(match):
+    word = match["word"].lower().replace("ё", "е")
+    if word in _PRODUCT_LOOKALIKES or any(pattern.fullmatch(word) for pattern in WORDS.values()):
+        return match[0]
+    matches = {category for category, forms in _PRODUCT_FORMS.items()
+               if any(_one_typo(word, form) for form in forms)}
+    if len(matches) != 1:
+        return match[0]
+    canonical = {"table": "стол", "chair": "кресло", "lamp": "лампа"}[matches.pop()]
+    return match["prefix"] + canonical
+
+
+def _correct_buyer_text(text):
+    # «столь» is also an adverb. Require an item slot with a clear right boundary.
+    text = re.sub(r"\bлумп([ауые])\b", r"ламп\1", text, flags=re.I)
+    text = re.sub(r"\b(?:в|из)\s+тагане\b", "в Таганроге", text, flags=re.I)
+    text = re.sub(r"\bсотк[ау]\s+руб(?:асов|ликов)\b", "100 рублей", text, flags=re.I)
+    if re.search(r"\b(?:найди|подбери|подыщи|ищу)\b", text, re.I):
+        text = re.sub(r"\bза\s+(\d+(?:[.,]\d+)?)\s+руб\w*\b",
+                      r"бюджет \1 рублей", text, flags=re.I)
+    text = _TABLE_TYPO.sub(r"\1стол", text)
+    text = _PRODUCT_TYPO.sub(_correct_product, text)
+    text = _INITIAL_PRODUCT_TYPO.sub(_correct_product, text)
+    text = _THOUSAND_TYPO.sub(r"\1тысяч", text)
+    return _CITY_TYPO.sub(lambda m: m["prefix"] + (
+        "Азов" if m["city"].lower().startswith("аз") else "Ростов"), text)
 
 
 def active_dialog(messages):
@@ -69,7 +143,8 @@ def active_dialog(messages):
     for index, message in enumerate(messages):
         if message["role"] == "user" and RESET_DIALOG.fullmatch(normalize(message["text"])):
             boundary = index
-    return messages[boundary:] if boundary else messages
+    return [dict(message, text=_correct_buyer_text(message["text"]))
+            if message["role"] == "user" else message for message in messages[boundary:]]
 
 
 def _unscoped_price(text):
@@ -105,6 +180,12 @@ class LocalState:
     recovery_handled: bool = False
 
     def decision_questions(self):
+        if any(re.search(r"(.)\1{2,}", item) for item in self.unsupported_items):
+            return ({"field": "categories", "text":
+                     "Не удалось разобрать название товара. Пожалуйста, напишите его ещё раз."},)
+        if self.turn_issue == "lumens":
+            return ({"field": "categories", "text":
+                     "В каталоге нет данных о яркости в люменах. Подобрать лампу без этого требования?"},)
         if self.turn_issue == "recovery_no_undo":
             return ({"field": "categories", "text":
                      "Нет принятого предложения, которое можно отменить. Текущие условия сохранены. "
@@ -128,7 +209,14 @@ class LocalState:
         if self.turn_issue == "off_topic":
             return ({"field": "categories", "text": OFF_TOPIC_QUESTION},)
         if self.turn_issue == "ambiguous":
-            return ({"field": "categories", "text": DOMAIN_QUESTION},)
+            missing = self.questions()
+            if set(missing) == set(CORE):
+                return ({"field": "categories", "text": DOMAIN_QUESTION},)
+            if missing:
+                from buyer.selection import QUESTIONS as CLARIFICATION_TEXT
+                return tuple({"field": field, "text": CLARIFICATION_TEXT[field]}
+                             for field in missing)
+            return ({"field": "categories", "text": CHANGE_QUESTION},)
         if self.turn_issue in {"price", "chair_price"}:
             questions = [{"field": "budget_rub", "text":
                           "Указанное число — цена одного товара или общий бюджет на весь комплект?"}]
@@ -365,6 +453,9 @@ class ConversationManager:
             composition = category_text(text)
             switching_product = bool(re.search(
                 r"\b(?:а\s+)?что\s+(?:насчет|насчёт|по\s+поводу)\s+", composition))
+            switching_product |= bool(
+                current.categories and re.search(r"\bподыщи\b", composition)
+                and not re.search(r"\b(?:еще|добавь|также)\b", composition))
             composition_history.append({"role": "user", "text": composition})
             anchor = categories_from_dialog(composition_history)
             recognized, categories = _category_update(composition, current.categories, "categories" in pending)
@@ -444,6 +535,10 @@ class ConversationManager:
                 preferences = _filter_preferences(preferences, new_categories)
             if unsupported_measurement(text):
                 turn_issue = unsupported_measurement(text)
+                needs_model = True
+
+            if re.search(r"\bлюмен\w*\b", text):
+                turn_issue = "lumens"
                 needs_model = True
 
         # An uncertain last edit cannot reuse the old value in a local-only result.

@@ -241,7 +241,7 @@ function productPhoto(container, item, photo, preview = null) {
   const badge = element("span", "photo-badge");
   let usingPreview = !hasPhoto;
   function show() {
-    const label = usingPreview ? "Пример стола" : photo.synthetic ? "Демонстрационное фото" : "";
+    const label = usingPreview ? "Демонстрационное фото" : photo.synthetic ? "Демонстрационное фото" : "";
     image.alt = usingPreview ? label : label ? label + ": " + item.title : item.title;
     if (label) {
       if (!badge.textContent) container.append(badge);
@@ -596,7 +596,7 @@ query.addEventListener("keydown", (event) => {
   }
 });
 for (const group of ["prompts", "hero-chips"]) {
-  byId(group).addEventListener("click", (event) => {
+  byId(group)?.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-prompt]");
     if (button) submit(button.dataset.prompt);
   });
@@ -620,6 +620,67 @@ function resetDialogue() {
   query.focus();
 }
 reset.addEventListener("click", resetDialogue);
+
+function traceText(trace) {
+  if (trace.model === "Локальный разбор") return trace.model + " · без вызова Gemma";
+  const tokens = trace.prompt_tokens !== null && trace.completion_tokens !== null
+    ? " · " + (trace.prompt_tokens + trace.completion_tokens) + " токенов" : "";
+  return trace.model.split("/").pop() + " · " +
+    (trace.elapsed_ms / 1000).toLocaleString("ru-RU", {maximumFractionDigits: 2}) + " с" + tokens;
+}
+
+const buyerTab = byId("buyer-tab");
+const labTab = byId("lab-tab");
+function view(lab) {
+  if (lab) voiceInput.stop();
+  buyerTab.setAttribute("aria-pressed", String(!lab));
+  labTab.setAttribute("aria-pressed", String(lab));
+  byId("buyer-view").hidden = lab;
+  byId("lab-view").hidden = !lab;
+}
+buyerTab.addEventListener("click", () => view(false));
+labTab.addEventListener("click", () => view(true));
+
+function summarizeLab(response, catalog) {
+  if (response.status !== "ok") return response.status;
+  const names = new Map(catalog.map((item) => [item.id, item.title]));
+  return response.options.map((option) => option.listing_ids.map((id) => names.get(id)).join(", ")
+    + " · " + money(option.total_rub)).join("\n");
+}
+
+const labButton = byId("run-lab");
+labButton.addEventListener("click", async () => {
+  const panel = byId("lab-result");
+  const error = byId("lab-error");
+  error.hidden = true;
+  labButton.disabled = true;
+  labButton.textContent = "Сравниваем…";
+  try {
+    const data = await post("/api/lab", {});
+    panel.replaceChildren(element("h2", null, "Результат проверки"),
+      element("p", data.passed ? "pill" : "pill warning",
+        data.passed ? "Подбор совпал" : "Ожидание проверки не выполнено"));
+    const comparison = element("dl", "conditions comparison");
+    for (const [label, result] of [["Обычные описания", data.before], ["Описания со вставкой", data.after]]) {
+      const row = element("div");
+      row.append(element("dt", null, label), element("dd", null, summarizeLab(result, data.catalog)));
+      comparison.append(row);
+    }
+    panel.append(comparison);
+    if (data.passed) {
+      panel.append(element("p", "muted",
+        "Стол за 5 400 ₽ подходит. Стол за 9 500 ₽ превышает бюджет. Подбор использует цены из структурированных полей."));
+    }
+    panel.append(element("p", "model-trace", traceText(data.trace)),
+      jsonDetails({before: data.before, after: data.after}));
+  } catch (problem) {
+    error.textContent = problem.message;
+    error.hidden = false;
+  } finally {
+    labButton.disabled = false;
+    labButton.textContent = "Сравнить результаты";
+  }
+});
 
 fetch("/api/catalog").then((response) => response.ok ? response.json() : null).then((catalog) => {
   if (!catalog) return;

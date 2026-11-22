@@ -216,6 +216,10 @@ class VisualService:
         deadline = started + (self.config.timeout if timeout is None else timeout)
         try:
             if self.process is None:
+                # Report installation problems before starting a resource-limited worker.
+                from importlib.util import find_spec
+                if any(find_spec(name) is None for name in ("PIL", "numpy", "onnxruntime")):
+                    return unavailable("missing_dependencies")
                 context = multiprocessing.get_context("spawn")
                 parent, child = context.Pipe()
                 self.process = context.Process(target=worker, args=(child, self.config), daemon=True)

@@ -111,7 +111,7 @@ class VisionApiTest(unittest.TestCase):
         try:
             for path, mime, marker in (
                 ("/", "text/html", 'id="visual-panel"'),
-                ("/styles.css", "text/css", "avito-orbit"),
+                ("/styles.css", "text/css", ".hero-image"),
                 ("/app.js", "javascript", 'post("/api/buy"'),
             ):
                 connection.request("GET", path)
