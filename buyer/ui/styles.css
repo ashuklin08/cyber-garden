@@ -1002,3 +1002,6 @@ pre { font-family: "JetBrains Mono", ui-monospace, monospace; }
   100% { background-size: 3px 6px, 3px 8px, 3px 12px; }
 }
 .option-cover .photo-badge { font-size: .62rem; font-weight: 600; padding: 5px; }
+
+/* The supplied layout uses Manrope for labels and headings. */
+body { font-family: "Manrope", system-ui, sans-serif; }

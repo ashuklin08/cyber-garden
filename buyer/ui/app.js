@@ -3,6 +3,10 @@
 const byId = (id) => document.getElementById(id);
 const money = (value) => new Intl.NumberFormat("ru-RU").format(value) + " ₽";
 const query = byId("query");
+byId("header-pick")?.addEventListener("click", () => {
+  query.scrollIntoView({behavior: "smooth", block: "center"});
+  query.focus();
+});
 const messages = byId("messages");
 const starter = byId("starter");
 const evidence = byId("evidence");

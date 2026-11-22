@@ -25,6 +25,16 @@ ASSETS = {
     "/": (UI / "index.html", "text/html; charset=utf-8"),
     "/app.js": (UI / "app.js", "application/javascript; charset=utf-8"),
     "/styles.css": (UI / "styles.css", "text/css; charset=utf-8"),
+    "/reference.css": (UI / "reference.css", "text/css; charset=utf-8"),
+    "/manrope-cyrillic.woff2": (UI / "manrope-cyrillic.woff2", "font/woff2"),
+    "/manrope-latin.woff2": (UI / "manrope-latin.woff2", "font/woff2"),
+    "/showcase/tile-1.png": (UI / "showcase/tile-1.png", "image/png"),
+    "/showcase/tile-2.png": (UI / "showcase/tile-2.png", "image/png"),
+    "/showcase/tile-3.png": (UI / "showcase/tile-3.png", "image/png"),
+    "/showcase/tile-4.png": (UI / "showcase/tile-4.png", "image/png"),
+    "/showcase/tile-5.png": (UI / "showcase/tile-5.png", "image/png"),
+    "/showcase/tile-6.png": (UI / "showcase/tile-6.png", "image/png"),
+
     "/workspace.webp": (UI / "workspace.webp", "image/webp"),
     "/table-preview.webp": (ROOT / "data/visual/products/demo-1-1-02.webp", "image/webp"),
 }

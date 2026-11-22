@@ -112,6 +112,7 @@ class VisionApiTest(unittest.TestCase):
             for path, mime, marker in (
                 ("/", "text/html", 'id="visual-panel"'),
                 ("/styles.css", "text/css", "avito-orbit"),
+                ("/reference.css", "text/css", ".tile {"),
                 ("/app.js", "javascript", 'post("/api/buy"'),
             ):
                 connection.request("GET", path)
@@ -122,6 +123,17 @@ class VisionApiTest(unittest.TestCase):
                 self.assertIn(marker, source)
                 for demo in ("DEMO_SNAPSHOT", "loadDemoShowcase", "PHOTO_POOL", "images.unsplash.com"):
                     self.assertNotIn(demo, source)
+        finally:
+            connection.close()
+        connection = HTTPConnection("127.0.0.1", self.server.server_port, timeout=15)
+        try:
+            for path, mime in (("/showcase/tile-1.png", "image/png"),
+                               ("/manrope-cyrillic.woff2", "font/woff2")):
+                connection.request("GET", path)
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                self.assertIn(mime, response.getheader("Content-Type"))
+                self.assertTrue(response.read())
         finally:
             connection.close()
         self.assertIsNone(self.server.visual_setup)
