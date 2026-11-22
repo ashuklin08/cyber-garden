@@ -41,6 +41,195 @@
       "path": "queries/landscape.png",
       "prompt": "Synthetic test landscape photograph of rugged snow-capped mountains and a lake, outdoor daylight. No furniture, no desk, chair or lamps, no people or text. Square.",
       "sha256": "f99c403baaf188ab731ff70c1b9a5626d0b32aea14f448528923234b711b742e"
+    },
+    {
+      "path": "products/demo-1-1-01.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "synthetic": true,
+      "sha256": "f42d4ca67d11e7dc55ada5306429b9b82886f1b3897403ec3ca1429ead3c4e63"
+    },
+    {
+      "path": "products/demo-1-1-02.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 2,
+      "synthetic": true,
+      "sha256": "af21134863c1eff484b7619c06f5d3e4e977a7c98289c0db8909bf8dca63ce87"
+    },
+    {
+      "path": "products/demo-1-1-03.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "synthetic": true,
+      "sha256": "4362e26fba99b7ef7a5690d70e3226b686c3e231a215ac7b8464ee329b5388ba"
+    },
+    {
+      "path": "products/demo-1-1-05.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "synthetic": true,
+      "sha256": "f9a942143f8ac9992ae6156b6c283a6eb4493d026de6cf9dbbb7737bafef0379"
+    },
+    {
+      "path": "products/demo-1-1-07.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 5,
+      "synthetic": true,
+      "sha256": "e4758b98c5a796e8ee3f6f08b85dcb49d3d5a628ae2532fbbf8c56e9e986eb79"
+    },
+    {
+      "path": "products/demo-1-2-01.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "synthetic": true,
+      "sha256": "8634928142a421dc6ab43fc0779aea2ad5b245e54aff9e8f4a9af905602e3e2e"
+    },
+    {
+      "path": "products/demo-1-2-03.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "synthetic": true,
+      "sha256": "b9afb673d895aa3225a1de289c62ee722bbfaae1d608a86f676bc8320b8028eb"
+    },
+    {
+      "path": "products/demo-1-2-04.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "synthetic": true,
+      "sha256": "05bd1469f06f12a6b757614bf2e363834e35dc5d68d61c1f59249d9c36c986b8"
+    },
+    {
+      "path": "products/demo-1-2-06.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 5,
+      "synthetic": true,
+      "sha256": "f44e016489868c30131d0400475b64e87641ada21f338cd36fc4d6127abd70b0"
+    },
+    {
+      "path": "products/demo-1-2-08.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 6,
+      "synthetic": true,
+      "sha256": "b5af00593e7e07b1a252f547092fed20646b37df95f89153b3e2a96d87f2a639"
+    },
+    {
+      "path": "products/demo-1-3-01.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "synthetic": true,
+      "sha256": "3b2b8e3f2acbb38b33db191f33f8ad74472e1fd0d03bd55134b55c5949057cf1"
+    },
+    {
+      "path": "products/demo-1-3-03.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 2,
+      "synthetic": true,
+      "sha256": "4294a7b3512a95e4033687020edaec273c49e1154237c8678936c5e307363d30"
+    },
+    {
+      "path": "products/demo-1-3-04.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "synthetic": true,
+      "sha256": "543db1ea25b85ffc5d1f792fbb62f67c80726e0aa401023f9df01a347253909f"
+    },
+    {
+      "path": "products/demo-1-3-05.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "synthetic": true,
+      "sha256": "8ab18dc331d888a3e5b4c88557453d410d4f7ef27b1238e06d15bc42600bda61"
+    },
+    {
+      "path": "products/demo-1-3-10.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 5,
+      "synthetic": true,
+      "sha256": "eaea2542d2271043503f63b3587ca3d71ee569b0ef809e2df8bcbde951787d9f"
+    },
+    {
+      "path": "queries/holdout-pine.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "synthetic": true,
+      "sha256": "9d3b42870038f52e0c4c772d066551c7662fc85aa6225a9f54a2090e9f7569ac"
+    },
+    {
+      "path": "queries/holdout-office.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 2,
+      "synthetic": true,
+      "sha256": "610c90039e885527f6e676215c01d6ebdcfb9833831e3174e0571f20a9f2d46f"
+    },
+    {
+      "path": "queries/holdout-led.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "synthetic": true,
+      "sha256": "1af6a9d1df22707ae99fb82b3d894698cd27d92622a1fece88aea16512049be6"
+    },
+    {
+      "path": "queries/holdout-clip.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "synthetic": true,
+      "sha256": "39caac5ae76a6d57036f97cd263e19e62405526faabc2d1381cb28f310771557"
+    },
+    {
+      "path": "queries/holdout-drawers.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 5,
+      "synthetic": true,
+      "sha256": "ae40106dab3d20eeae2ec3c16b5d0e0c900b5810213a39e5d5636b385c9b98ea"
+    },
+    {
+      "path": "queries/holdout-gaming.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 6,
+      "synthetic": true,
+      "sha256": "a0c58d7d164e8525fdb5e935e7f534dc3a625750c53993342055c00f9058a672"
+    },
+    {
+      "path": "queries/holdout-fridge.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 1,
+      "synthetic": true,
+      "sha256": "5ddb8f551f3ee7d6a8b37edc2e6cce868b46e7f534470ceb9e6ac7a621fca667"
+    },
+    {
+      "path": "queries/holdout-car.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 2,
+      "synthetic": true,
+      "sha256": "a08484aac0026545e33c075efbc86b31a11b340d00f32edec9a3cabf542f57fc"
+    },
+    {
+      "path": "queries/holdout-bike.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 3,
+      "synthetic": true,
+      "sha256": "fab976eefc4e149053a9f0b986ec41bbefdd9432d6caad69f6613e35f6cc6243"
+    },
+    {
+      "path": "queries/holdout-dog.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 4,
+      "synthetic": true,
+      "sha256": "7402be54d12d4ef8c211e65337535249c531a19f6d33057378ff87fa30247841"
+    },
+    {
+      "path": "queries/holdout-canyon.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 5,
+      "synthetic": true,
+      "sha256": "bda21c6a9cf3b8f3d8e063da7a80f3fee1b28b459a6fe1983a0114b70e79472b"
+    },
+    {
+      "path": "queries/calibration-pineapple.webp",
+      "source": "ImageGen photorealistic contact sheet",
+      "cell": 6,
+      "synthetic": true,
+      "sha256": "b6741808f5dfef39e015c99849859a8092bb4613ed25ac2ab1a56349309948d9"
     }
   ]
 }

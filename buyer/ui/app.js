@@ -421,8 +421,9 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
   const recheck = byId("visual-recheck");
   let file = null, objectURL = null, pending = false, selecting = false, controller = null, generation = 0;
   let exampleController = null, healthGeneration = 0, healthPending = false, exampleButtons = [];
+  let setupTimer, preparing = false;
   function controls() {
-    search.disabled = !file || pending || selecting || healthPending; remove.disabled = !file && !selecting; input.disabled = pending;
+    search.disabled = !file || pending || selecting || healthPending || preparing; remove.disabled = !file && !selecting; input.disabled = pending;
     recheck.disabled = pending || selecting || healthPending;
     for (const button of exampleButtons) button.disabled = pending || selecting || healthPending;
     search.textContent = pending ? "Ищу похожие товары…" : "Найти похожие товары";
@@ -459,19 +460,33 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
       if (generation === selectedGeneration) { selecting = false; exampleController = null; controls(); }
     }
   }
-  async function refreshReadiness() {
+  async function refreshReadiness(retry = false) {
     if (healthPending || pending || selecting) return;
+    clearTimeout(setupTimer);
     healthPending = true; controls();
     const check = ++healthGeneration;
-    readiness.textContent = "Проверяю готовность визуального поиска…";
-    readiness.setAttribute("data-state", "checking");
+    if (!preparing) {
+      readiness.textContent = "Проверяю готовность визуального поиска…";
+      readiness.setAttribute("data-state", "checking");
+    }
     const health = new AbortController();
     const timeout = setTimeout(() => health.abort(), 10000);
     try {
-      const response = await fetch("/api/visual-status", {signal: health.signal});
+      const response = await fetch(retry ? "/api/visual-status?retry=1" : "/api/visual-status", {signal: health.signal});
       const data = await response.json();
       if (check !== healthGeneration) return;
       if (!response.ok) throw new Error("Readiness unavailable");
+      preparing = ["not_started", "checking", "preparing", "downloading", "verifying", "building_index", "calibrating"].includes(data.status);
+      if (preparing) {
+        const progress = Number.isFinite(data.downloaded_bytes) && data.downloaded_bytes >= 0
+          && data.total_bytes > 0 && data.downloaded_bytes <= data.total_bytes
+          ? " · " + Math.floor(data.downloaded_bytes / data.total_bytes * 100) + "%" : "";
+        readiness.textContent = data.message + progress;
+        readiness.setAttribute("data-state", "checking");
+        setup.hidden = true;
+        if (!panel.hidden) setupTimer = setTimeout(() => refreshReadiness(), 1500);
+        return;
+      }
       readiness.textContent = data.message + (data.coverage ? " Покрытие: " + data.coverage.indexed + " из " + data.coverage.total + " объявлений." : "");
       readiness.setAttribute("data-state", data.status === "ready" ? "ready" : "unavailable");
       setup.hidden = data.status === "ready";
@@ -489,13 +504,14 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
       controls();
     } catch {
       if (check === healthGeneration) {
+        preparing = false;
         readiness.textContent = "Готовность фото-поиска не подтверждена. Обычный поиск доступен.";
         readiness.setAttribute("data-state", "unavailable");
         setup.hidden = false; setupHint.textContent = "Проверьте запуск сервера и подготовку модуля по README.";
       }
     } finally { clearTimeout(timeout); healthPending = false; controls(); }
   }
-  recheck.addEventListener("click", refreshReadiness);
+  recheck.addEventListener("click", () => refreshReadiness(true));
   function choose(files) {
     clear();
     if (!files || files.length !== 1 || !files[0].size || files[0].size > 5 * 1024 * 1024) {
@@ -525,6 +541,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
     const opening = panel.hidden;
     panel.hidden = !opening; toggle.setAttribute("aria-expanded", String(opening));
     if (opening) { voiceInput.stop(); refreshReadiness(); }
+    else clearTimeout(setupTimer);
   });
   input.addEventListener("change", () => choose(input.files));
   const drop = byId("visual-drop");
@@ -532,7 +549,7 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
   drop.addEventListener("drop", event => { event.preventDefault(); if (!pending) choose(event.dataTransfer.files); });
   remove.addEventListener("click", clear);
   search.addEventListener("click", async () => {
-    if (!file || pending) return;
+    if (!file || pending || preparing || healthPending) return;
     const requestGeneration = generation;
     pending = true; controls(); cards.replaceChildren();
     status.textContent = "Ищу похожие товары…";

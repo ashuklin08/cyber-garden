@@ -1,0 +1,201 @@
+{
+  "metrics": {
+    "positive": 6,
+    "negative": 5,
+    "recall_at_1": 5,
+    "recall_at_3": 6,
+    "recall_at_5": 6,
+    "category_at_1": 6,
+    "category_at_3": 6,
+    "category_at_5": 6,
+    "false_matches": 0
+  },
+  "samples": [
+    {
+      "path": "queries/holdout-pine.webp",
+      "listing_id": "t12",
+      "results": [
+        "t12",
+        "demo-1-1-03"
+      ],
+      "wall_ms": 1125.0
+    },
+    {
+      "path": "queries/holdout-office.webp",
+      "listing_id": "c04",
+      "results": [
+        "c04",
+        "demo-1-2-04",
+        "demo-1-2-03",
+        "demo-1-2-01",
+        "demo-1-2-06"
+      ],
+      "wall_ms": 172.0
+    },
+    {
+      "path": "queries/holdout-led.webp",
+      "listing_id": "l09",
+      "results": [
+        "demo-1-3-04",
+        "l09",
+        "demo-1-3-10",
+        "demo-1-3-03",
+        "demo-1-3-05"
+      ],
+      "wall_ms": 156.0
+    },
+    {
+      "path": "queries/holdout-clip.webp",
+      "listing_id": "demo-1-3-01",
+      "results": [
+        "demo-1-3-01",
+        "l09",
+        "demo-1-3-05",
+        "demo-1-3-03",
+        "demo-1-3-10"
+      ],
+      "wall_ms": 156.0
+    },
+    {
+      "path": "queries/holdout-drawers.webp",
+      "listing_id": "demo-1-1-05",
+      "results": [
+        "demo-1-1-05",
+        "demo-1-1-02",
+        "demo-1-1-01",
+        "demo-1-1-03",
+        "demo-1-1-07"
+      ],
+      "wall_ms": 172.0
+    },
+    {
+      "path": "queries/holdout-gaming.webp",
+      "listing_id": "demo-1-2-08",
+      "results": [
+        "demo-1-2-08",
+        "c04",
+        "demo-1-2-03"
+      ],
+      "wall_ms": 156.0
+    },
+    {
+      "path": "queries/holdout-fridge.webp",
+      "listing_id": null,
+      "results": [],
+      "wall_ms": 156.0
+    },
+    {
+      "path": "queries/holdout-car.webp",
+      "listing_id": null,
+      "results": [],
+      "wall_ms": 172.0
+    },
+    {
+      "path": "queries/holdout-bike.webp",
+      "listing_id": null,
+      "results": [],
+      "wall_ms": 172.0
+    },
+    {
+      "path": "queries/holdout-dog.webp",
+      "listing_id": null,
+      "results": [],
+      "wall_ms": 156.0
+    },
+    {
+      "path": "queries/holdout-canyon.webp",
+      "listing_id": null,
+      "results": [],
+      "wall_ms": 188.0
+    }
+  ],
+  "first_ready": {
+    "status": "ready",
+    "message": "Визуальный поиск готов. Выберите фото или демо-пример.",
+    "coverage": {
+      "indexed": 18,
+      "total": 111
+    },
+    "examples": [
+      {
+        "name": "table",
+        "label": "Стол",
+        "url": "/visual-demo/table"
+      },
+      {
+        "name": "chair",
+        "label": "Кресло",
+        "url": "/visual-demo/chair"
+      },
+      {
+        "name": "lamp",
+        "label": "Лампа",
+        "url": "/visual-demo/lamp"
+      },
+      {
+        "name": "landscape",
+        "label": "Пейзаж · без совпадения",
+        "url": "/visual-demo/landscape"
+      }
+    ],
+    "downloaded": true,
+    "index_built": true,
+    "calibrated": true,
+    "weights_ms": 25906.0,
+    "index_ms": 2746.9
+  },
+  "first_wall_s": 30.86,
+  "phases": [
+    "preparing",
+    "downloading",
+    "building_index",
+    "calibrating",
+    "ready"
+  ],
+  "parallel_status": [
+    "checking",
+    "preparing",
+    "preparing",
+    "preparing",
+    "preparing"
+  ],
+  "buy_during_setup": "ok (mock Gemma)",
+  "sha256": "ba9107df6e412828dae8c675096209aa39f6536de8ec8d9a872665b54dc750c3",
+  "bytes": 96745606,
+  "repeat_same_process": "unchanged mtime",
+  "restarted": {
+    "status": "ready",
+    "message": "Визуальный поиск готов. Выберите фото или демо-пример.",
+    "coverage": {
+      "indexed": 18,
+      "total": 111
+    },
+    "examples": [
+      {
+        "name": "table",
+        "label": "Стол",
+        "url": "/visual-demo/table"
+      },
+      {
+        "name": "chair",
+        "label": "Кресло",
+        "url": "/visual-demo/chair"
+      },
+      {
+        "name": "lamp",
+        "label": "Лампа",
+        "url": "/visual-demo/lamp"
+      },
+      {
+        "name": "landscape",
+        "label": "Пейзаж · без совпадения",
+        "url": "/visual-demo/landscape"
+      }
+    ],
+    "downloaded": false,
+    "index_built": false,
+    "calibrated": false,
+    "weights_ms": 78.0,
+    "index_ms": 0
+  }
+}

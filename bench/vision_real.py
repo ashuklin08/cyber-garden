@@ -12,6 +12,7 @@ from buyer.demo import DemoServer
 from buyer.vision.config import Config, MODEL_ID, REVISION, WEIGHT_BYTES, WEIGHT_SHA256
 from buyer.vision.index import build
 from buyer.contracts import decode_json
+from bench.vision_auto_real import wait_ready
 
 
 def main():
@@ -28,15 +29,8 @@ def main():
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": .01})
     thread.start()
     try:
-        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=15)
-        try:
-            connection.request("GET", "/api/visual-status")
-            response = connection.getresponse()
-            readiness = json.loads(response.read())
-            assert response.status == 200 and readiness["status"] == "ready", readiness
-            report["readiness"] = readiness
-        finally:
-            connection.close()
+        readiness, _ = wait_ready(server.server_port)
+        report["readiness"] = readiness
         report["demo_images_served"] = 0
         for name, expected in (("table", "t12"), ("chair", "c04"), ("lamp", "l09"), ("cat", None), ("landscape", None)):
             raw = (config.visual / f"queries/{name}.png").read_bytes()

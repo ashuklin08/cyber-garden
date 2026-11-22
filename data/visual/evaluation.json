@@ -1,13 +1,76 @@
 {
-  "version": 1,
+  "version": 2,
   "synthetic": true,
   "calibration": [
-    {"path": "queries/table.png", "listing_id": "t12"},
-    {"path": "queries/chair.png", "listing_id": "c04"},
-    {"path": "queries/cat.png", "listing_id": null}
+    {
+      "path": "queries/table.png",
+      "listing_id": "t12"
+    },
+    {
+      "path": "queries/chair.png",
+      "listing_id": "c04"
+    },
+    {
+      "path": "queries/lamp.png",
+      "listing_id": "l09"
+    },
+    {
+      "path": "queries/cat.png",
+      "listing_id": null
+    },
+    {
+      "path": "queries/landscape.png",
+      "listing_id": null
+    },
+    {
+      "path": "queries/calibration-pineapple.webp",
+      "listing_id": null
+    }
   ],
   "holdout": [
-    {"path": "queries/lamp.png", "listing_id": "l09"},
-    {"path": "queries/landscape.png", "listing_id": null}
+    {
+      "path": "queries/holdout-pine.webp",
+      "listing_id": "t12"
+    },
+    {
+      "path": "queries/holdout-office.webp",
+      "listing_id": "c04"
+    },
+    {
+      "path": "queries/holdout-led.webp",
+      "listing_id": "l09"
+    },
+    {
+      "path": "queries/holdout-clip.webp",
+      "listing_id": "demo-1-3-01"
+    },
+    {
+      "path": "queries/holdout-drawers.webp",
+      "listing_id": "demo-1-1-05"
+    },
+    {
+      "path": "queries/holdout-gaming.webp",
+      "listing_id": "demo-1-2-08"
+    },
+    {
+      "path": "queries/holdout-fridge.webp",
+      "listing_id": null
+    },
+    {
+      "path": "queries/holdout-car.webp",
+      "listing_id": null
+    },
+    {
+      "path": "queries/holdout-bike.webp",
+      "listing_id": null
+    },
+    {
+      "path": "queries/holdout-dog.webp",
+      "listing_id": null
+    },
+    {
+      "path": "queries/holdout-canyon.webp",
+      "listing_id": null
+    }
   ]
 }

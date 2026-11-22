@@ -34,15 +34,25 @@ def demo_image(config, name):
     return path.read_bytes()
 
 
-def read_calibration(config, metadata):
-    path = config.visual / "calibration.json"
+def read_calibration(config, metadata, *, reference=False):
+    path = config.cache / "calibration.json"
+    if reference or not path.is_file():
+        path = config.visual / "calibration.json"
     if not path.is_file():
         raise FileNotFoundError("missing_calibration")
     if path.stat().st_size > 128_000:
         raise ValueError("stale_calibration")
     calibration = json.loads(path.read_text(encoding="utf-8"))
+    if path.parent == config.visual and calibration.get("images") and calibration.get("fingerprint") == metadata["fingerprint"]:
+        # The bundled report is a reference for strict subsets. A fresh full
+        # installation writes its own calibration to the runtime cache.
+        raise FileNotFoundError("missing_calibration")
     threshold = calibration.get("threshold")
-    if (calibration.get("fingerprint") != metadata["fingerprint"] or type(threshold) not in (float, int)
+    subset = (calibration.get("manifest_sha256") == metadata.get("manifest_sha256")
+              and calibration.get("weights_sha256") == metadata.get("weights_sha256")
+              and calibration.get("preprocessing") == metadata.get("preprocessing")
+              and bool(metadata.get("images")) and all(row in calibration.get("images", []) for row in metadata["images"]))
+    if ((calibration.get("fingerprint") != metadata["fingerprint"] and not subset) or type(threshold) not in (float, int)
             or not -1 <= threshold <= 1 or not calibration.get("method")):
         raise ValueError("stale_calibration")
     if calibration.get("evaluation_sha256"):
@@ -52,7 +62,20 @@ def read_calibration(config, metadata):
             raise ValueError("stale_calibration")
         if manifest_sha256(json.loads(evaluation.read_bytes())) != calibration["evaluation_sha256"]:
             raise ValueError("stale_calibration")
+        from buyer.vision.index import sha
+        for row in calibration.get("calibration_images", []):
+            sample = safe_path(config.visual, row["path"])
+            if not sample.is_file() or sample.stat().st_size > 5 * 1024 * 1024 or sha(sample.read_bytes()) != row["sha256"]:
+                raise ValueError("stale_calibration")
     return threshold
+
+
+def ready_state(config, catalog, rows):
+    examples = [dict(name=name, label=label, url="/visual-demo/" + name)
+                for name, (relative, label) in DEMO_IMAGES.items()
+                if safe_path(config.visual, relative).is_file()]
+    return dict(status="ready", message="Визуальный поиск готов. Выберите фото или демо-пример.",
+                coverage=dict(indexed=len(rows), total=len(catalog)), examples=examples)
 
 
 class Engine:
@@ -71,11 +94,7 @@ class Engine:
         _, rows, metadata = load(self.config, catalog)
         read_calibration(self.config, metadata)
         verify_weights(self.config.model)
-        examples = [dict(name=name, label=label, url="/visual-demo/" + name)
-                    for name, (relative, label) in DEMO_IMAGES.items()
-                    if safe_path(self.config.visual, relative).is_file()]
-        return dict(status="ready", message="Визуальный поиск готов. Выберите фото или демо-пример.",
-                    coverage=dict(indexed=len(rows), total=len(catalog)), examples=examples)
+        return ready_state(self.config, catalog, rows)
 
     def search(self, raw, catalog):
         from buyer.vision.image_validation import decode_image, InvalidImage

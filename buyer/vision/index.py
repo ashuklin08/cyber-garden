@@ -64,23 +64,26 @@ def identity(entries, manifest_sha):
                 preprocessing=PREPROCESSING, manifest_sha256=manifest_sha, images=entries)
 
 
-def build(config, catalog, model=None):
+def build(config, catalog, model=None, *, weights_verified=False):
     import numpy as np
     from buyer.vision.model import VisionModel
     started = time.perf_counter()
     entries, manifest_sha = manifest_entries(config, catalog)
     if not entries:
         raise ValueError("no_current_ids")
-    model = model or VisionModel(config.model)
+    model = model or VisionModel(config.model, verified=weights_verified)
     vectors = np.stack([model.embed(decode_image(safe_path(config.visual, row["path"]).read_bytes())) for row in entries])
     metadata = identity(entries, manifest_sha) | dict(catalog_sha256=catalog_sha(catalog))
     metadata["fingerprint"] = sha(json.dumps(identity(entries, manifest_sha), sort_keys=True).encode())
     config.cache.mkdir(parents=True, exist_ok=True)
     target = config.cache / "index.npz"
     temporary = target.with_suffix(".tmp")
-    with temporary.open("wb") as stream:
-        np.savez_compressed(stream, vectors=vectors, metadata=json.dumps(metadata))
-    temporary.replace(target)
+    try:
+        with temporary.open("wb") as stream:
+            np.savez_compressed(stream, vectors=vectors, metadata=json.dumps(metadata))
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
     return metadata, dict(model_load_ms=getattr(model, "load_ms", 0), build_ms=(time.perf_counter() - started) * 1000)
 
 

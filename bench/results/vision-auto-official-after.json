@@ -1,0 +1,66 @@
+[
+  {
+    "path": "data/catalog.json",
+    "sha256": "98263D0DE6D4CDCEB851B5C00042D559FB27D51BBFDB245E24FE86C90024E09D"
+  },
+  {
+    "path": "data/categories.json",
+    "sha256": "034FB7667D15330978901B3BFDAAAFC1967939AAF3D74E4B0E5A85CD6315B814"
+  },
+  {
+    "path": "data/cities.json",
+    "sha256": "E26D333078DAEED5AC5B3C464CF8F16F2ACDBD91B7772135A430A3025977B712"
+  },
+  {
+    "path": "schemas/catalog.schema.json",
+    "sha256": "0122F4D3EB7849F1AC6F2F3B727E61405E6F95D87BD8D127EAD06CB8080046A8"
+  },
+  {
+    "path": "schemas/categories.schema.json",
+    "sha256": "8DD73EBD4C156A11C321170EDF8B36214CF9DAAB588E2C7772816183F8335BA5"
+  },
+  {
+    "path": "schemas/cities.schema.json",
+    "sha256": "8B8E4E9690620EDC70D312418353E4CC613B033A33A472FCDA04F10841873F64"
+  },
+  {
+    "path": "schemas/llm-request.schema.json",
+    "sha256": "A914679B89C28EAE7D7D46916FEBAF31A77B7FD8E9B7BFBA80299DB5695387F7"
+  },
+  {
+    "path": "schemas/llm-response.schema.json",
+    "sha256": "8FA93491E8DF63879CFCD474725359DA750DD5644901BEE7F5D727F0890748B2"
+  },
+  {
+    "path": "schemas/request.schema.json",
+    "sha256": "0D1E53C69D52572B493B5C42813CD1F2DB12C83FEDC9E4401A34E45E958462DB"
+  },
+  {
+    "path": "schemas/response.schema.json",
+    "sha256": "ECA6679C67AE858EFD88ACB4B0E27CD7330E691D48968835B63CD980977E23FF"
+  },
+  {
+    "path": "examples/01-selection/request.json",
+    "sha256": "8EA3ED0A0121294F726255C2E4797DD746856EB4A5EFDA2763CE331D76B2E1AB"
+  },
+  {
+    "path": "examples/01-selection/response.json",
+    "sha256": "52954586D660B7EC2FE552AACA19C47483083FDD4AD9194D64316623322D793E"
+  },
+  {
+    "path": "examples/02-clarification/request.json",
+    "sha256": "B031FC55670A54BCF2B3C63F2D0B7400F37B61D22CE1DCE51220AC4A7AD77C32"
+  },
+  {
+    "path": "examples/02-clarification/response.json",
+    "sha256": "7EC471495099EDEECF3FF05880E1A19AB8F0295D9A286DD0BE4C0BD6D664971D"
+  },
+  {
+    "path": "llm/request.example.json",
+    "sha256": "3BF7C2409444108CBCB884AD1F705FCCDA310D3BDD1C82F4C3484FFAE27641F6"
+  },
+  {
+    "path": "llm/response.example.json",
+    "sha256": "387DA226E5F0900605352C32D6AD8FBE40B42BD273BA139643299518BDA4365C"
+  }
+]

@@ -10,7 +10,7 @@ from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import BoundedSemaphore
+from threading import BoundedSemaphore, Lock
 
 from buyer.contracts import CATEGORIES, CITIES, ROOT, decode_json, read_catalog, read_messages
 from buyer.conversation import ConversationManager
@@ -35,15 +35,20 @@ class DemoServer(ThreadingHTTPServer):
 
     def __init__(self, port, catalog, provider=None):
         self.provider = provider
+        self.catalog_path = catalog.resolve()
         self.catalog = [] if provider else decode_json(catalog.read_bytes())
         self.listings = read_catalog(self.catalog)
         self.titles = {item["id"]: item["title"] for item in self.catalog}
         self.gateway_slot = BoundedSemaphore(1)
         self.visual_slot = BoundedSemaphore(1)
         self.visual_service = None
+        self.visual_setup = None
+        self.visual_setup_lock = Lock()
         super().__init__(("127.0.0.1", port), Handler)
 
     def server_close(self):
+        if self.visual_setup is not None:
+            self.visual_setup.close()
         if self.visual_service is not None:
             self.visual_service.close()
         super().server_close()
@@ -94,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Каталог временно недоступен."})
         elif self.path.startswith("/visual-images/"):
             self._visual_image()
-        elif self.path == "/api/visual-status":
+        elif self.path in ("/api/visual-status", "/api/visual-status?retry=1"):
             self._visual_status()
         elif self.path.startswith("/visual-demo/"):
             self._visual_demo()
@@ -127,19 +132,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.NOT_FOUND, {"error": "Изображение недоступно."})
 
     def _visual_status(self):
-        if not self.server.visual_slot.acquire(blocking=False):
-            self._json(HTTPStatus.OK, {"status": "visual_busy", "message": "Визуальный поиск занят. Дождитесь окончания текущего запроса."})
+        if self.headers.get("Sec-Fetch-Site") == "cross-site":
+            self._json(HTTPStatus.FORBIDDEN, {"status": "visual_unavailable", "message": "Откройте страницу SmartSet."})
             return
         try:
-            from buyer.vision.service import VisualService
-            if self.server.visual_service is None:
-                self.server.visual_service = VisualService()
-            result = self.server.visual_service.status(self.server.catalog)
+            from buyer.vision.setup import SetupManager
+            if self.server.provider:
+                raise ValueError("Visual search requires a local JSON catalog")
+            with self.server.visual_setup_lock:
+                if self.server.visual_setup is None:
+                    self.server.visual_setup = SetupManager(self.server.catalog_path)
+            result = self.server.visual_setup.status(retry=self.path.endswith("?retry=1"))
         except Exception:
             result = {"status": "visual_unavailable", "code": "missing_module", "message":
                 "Визуальный поиск недоступен. Текстовый и голосовой поиск продолжают работать."}
-        finally:
-            self.server.visual_slot.release()
         self._json(HTTPStatus.OK, result)
 
     def _visual_demo(self):
@@ -202,6 +208,11 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError
             try:
                 from buyer.vision.service import VisualService
+                if self.server.visual_setup is not None:
+                    state = self.server.visual_setup.status()
+                    if state.get("status") != "ready":
+                        self._json(HTTPStatus.OK, state)
+                        return
                 if self.server.visual_service is None:
                     self.server.visual_service = VisualService()
                 result = self.server.visual_service.search(image, self.server.catalog)

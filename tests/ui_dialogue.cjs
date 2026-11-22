@@ -56,7 +56,7 @@ function create(speech = 'standard') {
     URL: {createObjectURL: () => 'blob:demo-' + ++objectNumber, revokeObjectURL: url => revokedURLs.push(url)},
     fetch: async (path, options) => {
       if (path === '/api/catalog') return {ok: true, json: async () => ({total: 1, cities: ['Таганрог']})};
-      if (path === '/api/visual-status') {
+      if (path === '/api/visual-status' || path === '/api/visual-status?retry=1') {
         healthRequests.push(path);
         const result = await abortable(healthReplies.length ? healthReplies.shift() : ready, options?.signal);
         return {ok: true, json: async () => result};
@@ -486,6 +486,23 @@ async function main() {
     assert.equal(t.byId('visual-search').disabled, true);
     await t.byId('visual-recheck').handlers.click(); assert.equal(t.healthRequests.length, 1);
     release(t.ready); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(t.byId('visual-search').disabled, false);
+  });
+  await test('setup polling shows real bytes, preserves dictation and stops at ready', async () => {
+    const t = create();
+    t.healthReplies.push({status: 'downloading', message: 'Скачиваем', downloaded_bytes: 25, total_bytes: 100}, t.ready);
+    await openPhoto(t);
+    assert.match(t.byId('visual-readiness').textContent, /25%/);
+    choosePhoto(t);
+    assert.equal(t.byId('visual-search').disabled, true);
+    const r = mic(t); r.result([['Стол в Азове', true]]); r.end();
+    assert.equal(t.byId('query').value, 'Стол в Азове');
+    t.replies.push(t.ok); await t.context.submit(t.byId('query').value);
+    assert.equal(t.requests.length, 1);
+    [...t.timers.values()][0]();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(t.healthRequests.length, 2);
+    assert.equal(t.timers.size, 0);
     assert.equal(t.byId('visual-search').disabled, false);
   });
   console.log(`Completed ${executed} dialogue, speech and photo scenarios; failures: ${failures.length}`);

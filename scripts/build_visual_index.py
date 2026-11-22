@@ -14,7 +14,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=ROOT / "data/catalog.json")
     args = parser.parse_args()
-    metadata, timings = build(Config(), decode_json(args.catalog.read_bytes()))
+    from buyer.vision.setup import installation_lock
+    config = Config()
+    with installation_lock(config.cache):
+        metadata, timings = build(config, decode_json(args.catalog.read_bytes()))
     print(json.dumps(dict(indexed=len(metadata["images"]), fingerprint=metadata["fingerprint"], timings=timings)))
 
 
