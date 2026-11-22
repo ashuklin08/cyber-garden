@@ -789,10 +789,12 @@ fetch("/api/catalog").then((response) => response.ok ? response.json() : null).t
     }
     else clearTimeout(setupTimer);
   });
-  input.addEventListener("change", () => choose(input.files));
+  // FileList is live: clear() resets the input before choose() validates it.
+  // Snapshot its entries so a normal browser upload survives that reset.
+  input.addEventListener("change", () => choose([...input.files]));
   const drop = byId("visual-drop");
   drop.addEventListener("dragover", event => event.preventDefault());
-  drop.addEventListener("drop", event => { event.preventDefault(); if (!pending) choose(event.dataTransfer.files); });
+  drop.addEventListener("drop", event => { event.preventDefault(); if (!pending) choose([...event.dataTransfer.files]); });
   remove.addEventListener("click", clear);
   search.addEventListener("click", async () => {
     if (!file || pending || preparing || healthPending) return;
